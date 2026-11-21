@@ -1,4 +1,7 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+
 
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -115,7 +118,7 @@ export default function UserRow({
         <div className="text-sm font-medium">{row.full_name ?? row.email ?? row.user_id}</div>
         <div className="text-xs text-foreground/60 font-mono">{row.email ?? row.user_id}</div>
         <form onSubmit={startImpersonation}>
-          <button className="mt-2 rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Suplantar</button>
+          <Button variant="outline" className="mt-2 px-2 py-1 text-xs">Suplantar</Button>
         </form>
         {impersonateError ? (
           <div className="mt-1 text-xs text-red-600">{impersonateError}</div>
@@ -123,24 +126,24 @@ export default function UserRow({
       </td>
       <td className="px-3 py-2">
         <form action={updateOrgRole} className="flex items-center gap-2">
-          <select
+          <NativeSelect
             value={selectedOrgRole}
             onChange={(e) => setSelectedOrgRole(toMembershipRole(e.currentTarget.value))}
-            className="rounded-md border bg-background px-2 py-1 text-xs"
+            className="px-2 py-1 text-xs"
           >
             <option value="owner">propietario</option>
             <option value="admin">admin</option>
             <option value="member">miembro</option>
-          </select>
-          <button className="rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Actualizar</button>
+          </NativeSelect>
+          <Button variant="outline" className="px-2 py-1 text-xs">Actualizar</Button>
         </form>
       </td>
       <td className="px-3 py-2 space-y-2">
         <div className="flex items-center gap-2">
-          <select
+          <NativeSelect
             value={newRoleId}
             onChange={(e) => setNewRoleId(e.currentTarget.value)}
-            className="rounded-md border bg-background px-2 py-1 text-xs"
+            className="px-2 py-1 text-xs"
           >
             <option value="">Agregar rol?</option>
             {allRoles
@@ -148,7 +151,7 @@ export default function UserRow({
               .map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
-          </select>
+          </NativeSelect>
           <form
             action={async () => {
               if (!newRoleId) return;
@@ -156,7 +159,7 @@ export default function UserRow({
               setNewRoleId("");
             }}
           >
-            <button className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Agregar</button>
+            <Button variant="outline" className="px-2 py-1 text-xs">Agregar</Button>
           </form>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -176,10 +179,10 @@ export default function UserRow({
       </td>
       <td className="px-3 py-2 space-y-2">
         <div className="flex items-center gap-2">
-          <select
+          <NativeSelect
             value={newPermissionId}
             onChange={(e) => setNewPermissionId(e.currentTarget.value)}
-            className="rounded-md border bg-background px-2 py-1 text-xs"
+            className="px-2 py-1 text-xs"
           >
             <option value="">Agregar permiso?</option>
             {allPermissions
@@ -192,7 +195,7 @@ export default function UserRow({
               .map((p) => (
                 <option key={p.id} value={p.id}>{p.key}</option>
               ))}
-          </select>
+          </NativeSelect>
           <form
             action={async () => {
               if (!newPermissionId) return;
@@ -200,7 +203,7 @@ export default function UserRow({
               setNewPermissionId("");
             }}
           >
-            <button className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Agregar</button>
+            <Button variant="outline" className="px-2 py-1 text-xs">Agregar</Button>
           </form>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

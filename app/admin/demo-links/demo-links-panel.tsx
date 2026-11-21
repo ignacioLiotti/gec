@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+
 
 import { useMemo, useState, useTransition } from "react";
 
@@ -133,41 +135,41 @@ export default function DemoLinksPanel({
 				<div className="grid gap-4 p-4 md:grid-cols-2">
 					<label className="space-y-1 text-sm">
 						<span className="font-medium">Etiqueta</span>
-						<input
+						<Input
 							value={label}
 							onChange={(event) => setLabel(event.target.value)}
 							placeholder={`Demo ${tenantName}`}
-							className="w-full rounded-md border px-3 py-2"
+							className="w-full px-3 py-2"
 						/>
 					</label>
 					<label className="space-y-1 text-sm">
 						<span className="font-medium">Slug opcional</span>
-						<input
+						<Input
 							value={slug}
 							onChange={(event) => setSlug(event.target.value)}
 							placeholder="acme-demo"
-							className="w-full rounded-md border px-3 py-2"
+							className="w-full px-3 py-2"
 						/>
 					</label>
 					<label className="space-y-1 text-sm">
 						<span className="font-medium">Expira en dias</span>
-						<input
+						<Input
 							value={expiresInDays}
 							onChange={(event) => setExpiresInDays(event.target.value)}
 							placeholder="14"
 							type="number"
 							min={1}
 							max={90}
-							className="w-full rounded-md border px-3 py-2"
+							className="w-full px-3 py-2"
 						/>
 					</label>
 					<label className="space-y-1 text-sm">
 						<span className="font-medium">Capabilities</span>
-						<input
+						<Input
 							value={capabilities}
 							onChange={(event) => setCapabilities(event.target.value)}
 							placeholder="dashboard, excel"
-							className="w-full rounded-md border px-3 py-2"
+							className="w-full px-3 py-2"
 						/>
 					</label>
 				</div>

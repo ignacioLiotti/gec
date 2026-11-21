@@ -1,4 +1,7 @@
 "use client";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+
 
 import "./document-ai.css";
 
@@ -239,13 +242,13 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 				<div className="flex items-center gap-1.5">
 					<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
 						<PopoverTrigger asChild>
-							<button
+							<Button variant="outline"
 								type="button"
-								className="dai-press inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-stone-500 transition-colors hover:bg-stone-200/60 hover:text-stone-700"
+								className="dai-press inline-flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium transition-colors"
 							>
 								<History className="size-3.5" />
 								Historial
-							</button>
+							</Button>
 						</PopoverTrigger>
 						<PopoverContent align="end" sideOffset={8} className="w-[calc(100vw-2rem)] p-1.5 sm:w-80">
 							{chats.length === 0 ? (
@@ -262,7 +265,7 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 												chat.id === chatId ? "bg-[#fff1e9]" : "hover:bg-stone-100",
 											)}
 										>
-											<button
+											<Button variant="outline"
 												type="button"
 												onClick={() => void openChat(chat)}
 												className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2.5 py-2 text-left"
@@ -273,7 +276,7 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 												<span className="text-[10px] text-stone-400">
 													{formatRelativeDate(chat.updated_at)}
 												</span>
-											</button>
+											</Button>
 											{loadingChatId === chat.id ? (
 												<Loader2 className="mr-2 size-3.5 shrink-0 animate-spin text-stone-400" />
 											) : (
@@ -292,14 +295,14 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 							)}
 						</PopoverContent>
 					</Popover>
-					<button
+					<Button variant={"dark"}
 						type="button"
 						onClick={startNewChat}
-						className="dai-press inline-flex h-8 items-center gap-1.5 rounded-lg bg-stone-900 px-2.5 text-xs font-semibold text-white transition-colors hover:bg-stone-700 sm:px-3"
+						className="dai-press inline-flex h-8 items-center gap-1.5 px-2.5 text-xs font-semibold transition-colors sm:px-3"
 					>
 						<Plus className="size-3.5" />
 						Nueva
-					</button>
+					</Button>
 				</div>
 			</header>
 
@@ -321,14 +324,14 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 							</p>
 							<div className="dai-stagger mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
 								{SUGGESTIONS.map((suggestion) => (
-									<button
+									<Button variant={"secondary"}
 										key={suggestion}
 										type="button"
 										onClick={() => sendSuggestion(suggestion)}
-										className="dai-press rounded-xl border border-stone-200 bg-white px-3.5 py-3 text-left text-[13px] leading-5 text-stone-600 transition-[border-color,box-shadow] duration-200 hover:border-stone-300 hover:shadow-[0_2px_10px_rgba(28,25,23,0.06)]"
+										className="dai-press px-3.5 py-3 text-left text-[13px] leading-5 transition-[border-color,box-shadow] duration-200"
 									>
 										{suggestion}
-									</button>
+									</Button>
 								))}
 							</div>
 						</div>
@@ -370,13 +373,13 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 								<div className="dai-message-enter flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-700">
 									<TriangleAlert className="size-4 shrink-0" />
 									<span className="min-w-0 flex-1">Algo falló al responder.</span>
-									<button
+									<Button variant={"destructiveSecondary"}
 										type="button"
 										onClick={() => void reload({ body: { chatId, scope } })}
-										className="dai-press shrink-0 rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-100"
+										className="dai-press shrink-0 px-2.5 py-1 text-xs font-medium transition-colors"
 									>
 										Reintentar
-									</button>
+									</Button>
 								</div>
 							) : null}
 							<div ref={bottomRef} className="h-px" />
@@ -407,7 +410,7 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 				<form onSubmit={submit} className="mx-auto w-full max-w-3xl">
 					<div className="dai-composer rounded-2xl border border-stone-300/80 bg-white shadow-[0_2px_16px_rgba(28,25,23,0.06)] focus-within:border-stone-400 focus-within:shadow-[0_4px_24px_rgba(28,25,23,0.09)]">
 						<ScopeChips works={works} scope={scope} onScopeChange={setScope} />
-						<textarea
+						<Textarea
 							ref={textareaRef}
 							value={input}
 							onChange={(event) => {
@@ -423,7 +426,7 @@ export function DocumentAiPageClient({ works, demo }: { works: WorkOption[]; dem
 							rows={1}
 							readOnly={Boolean(demo)}
 							placeholder="Preguntale a tus documentos de obra…"
-							className="block max-h-[200px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 text-stone-900 outline-none placeholder:text-stone-400"
+							className="block max-h-[200px] w-full resize-none px-4 pb-1 pt-3.5 text-[15px] leading-6"
 						/>
 						<div className="flex items-center justify-between px-3 pb-2.5 pt-1">
 							<ScopePicker works={works} scope={scope} onScopeChange={setScope} />

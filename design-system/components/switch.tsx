@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 import { cn } from "../lib/utils"
@@ -32,7 +34,7 @@ export type SwitchProps = Omit<React.ComponentPropsWithoutRef<typeof SwitchPrimi
 export const Switch = React.forwardRef<
   React.ElementRef<typeof SwitchPrimitive.Root>,
   SwitchProps
->(({ className, size = "md", ...props }, ref) => (
+>(({ className, size = "sm", ...props }, ref) => (
   <SwitchPrimitive.Root
     className={cn(
       "peer inline-flex shrink-0 cursor-pointer items-center border border-stroke bg-surface-recessed p-0.5 shadow-recessed transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-primary/20 active:duration-100 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-colors data-[state=checked]:border-orange-primary data-[state=checked]:bg-orange-primary",

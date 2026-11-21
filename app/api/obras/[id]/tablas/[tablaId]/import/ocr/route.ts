@@ -19,12 +19,14 @@ import { applyOcrExtractionRowPolicy } from "@/lib/ocr-row-policy";
 import {
 	isHighDemandOcrProviderMessage,
 	localizeOcrProviderErrorMessage,
+	OcrProviderUnavailableError,
 } from "@/lib/ocr-error-message";
 import {
 	fetchTenantPlan,
 	type SubscriptionPlanLimits,
 } from "@/lib/subscription-plans";
 import { incrementTenantUsage, logTenantUsageEvent } from "@/lib/tenant-usage";
+import { recordOcrObservation, resolveOcrInitiator, type OcrObservationContext } from "@/lib/ocr-observation";
 import { estimateUsdForTokens } from "@/lib/ai-pricing";
 import {
 	buildContentFingerprintSource,
@@ -104,6 +106,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
 }
 
 function resolveOcrProcessingErrorCode(error: unknown): string | null {
+	if (error instanceof OcrProviderUnavailableError) return error.code;
 	const message = resolveUnknownErrorMessage(error);
 	if (isHighDemandOcrProviderMessage(message)) {
 		return OCR_PROVIDER_HIGH_DEMAND_ERROR_CODE;
@@ -777,7 +780,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		fileName: string;
 		uploadedBytes?: number;
 	} | null = null;
+	const extractionId = randomUUID();
 	let extractionIdForAudit: string | null = null;
+	let ocrObservation: OcrObservationContext | null = null;
 	let fileFingerprint: string | null = null;
 	let contentFingerprintNormalized: string | null = null;
 
@@ -816,6 +821,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
+		const origin = await resolveOcrInitiator(supabase, user?.id ?? null, request.cookies.get("impersonator_session")?.value);
+		const operationCorrelation = {
+			extractionId,
+			actorId: user?.id ?? null,
+			actorType: actorType === "demo" ? "demo" : "user",
+			simulation: Boolean(access.permissionSimulation),
+			...origin,
+			preview: ["1", "true"].includes(new URL(request.url).searchParams.get("preview") ?? ""),
+			test: process.env.NODE_ENV !== "production" && request.headers.get("x-e2e-ocr-stub") === "true",
+		};
 		const plan = await fetchTenantPlan(supabase, tenantId);
 		const planLimits = plan.limits;
 		resolvedTenantId = tenantId;
@@ -835,6 +850,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					amount: -reservedTokens,
 					context,
 					metadata: {
+						...operationCorrelation,
 						obraId: id,
 						tablaId,
 						reservedTokens,
@@ -852,6 +868,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 						amount: 0,
 						context: `${context}_failed`,
 						metadata: {
+							...operationCorrelation,
 							obraId: id,
 							tablaId,
 							reservedTokens,
@@ -1104,6 +1121,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					amount: tokenReservationTarget,
 					context: "ocr_reservation",
 					metadata: {
+						...operationCorrelation,
 						obraId: id,
 						tablaId,
 					},
@@ -1128,6 +1146,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				);
 			}
 		}
+
+		ocrObservation = {
+			tenantId, extractionId, actorId: user?.id ?? null, initiatorId: origin.initiatorId,
+			actorType: actorType === "demo" ? "demo" : "user",
+			obraId: id, tablaIds: [tablaId], preview: previewMode,
+			simulation: operationCorrelation.simulation, impersonation: operationCorrelation.impersonation,
+			test: useE2eOcrStub, startedAt: startTime,
+		};
+		extractionIdForAudit = extractionId;
+		await recordOcrObservation(supabase, ocrObservation, { phase: "started" });
 
 		let extraction: Record<string, any> | null = null;
 
@@ -1173,6 +1201,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 						typeof errBody?.error?.message === "string"
 							? errBody.error.message
 							: `Gemini API error ${res.status}`;
+					if (res.status === 503 && !isHighDemandOcrProviderMessage(providerMessage)) {
+						throw new OcrProviderUnavailableError();
+					}
 					throw new Error(localizeOcrProviderErrorMessage(providerMessage));
 				}
 				const json = await res.json();
@@ -1239,6 +1270,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				const result = await runGenerateTextFallback(imgBytes, imgMime);
 				extraction = result.object as Record<string, any>;
 			} catch (err) {
+				if (resolveOcrProcessingErrorCode(err)) throw err;
 				console.error("[tabla-rows:ocr-import] OCR extraction failed", err);
 			}
 		} else if (file) {
@@ -1251,6 +1283,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 					: inferMimeType(file.name);
 
 			if (!isOcrSupportedMime(fileMime)) {
+				await recordOcrObservation(supabase, ocrObservation, { phase: "failed", errorCode: "ocr_unsupported_file" });
 				return NextResponse.json(
 					{ error: "Tipo de archivo no soportado (PDF o imagen)" },
 					{ status: 400 }
@@ -1264,6 +1297,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				const result = await runGenerateTextFallback(fileBytes, fileMime);
 				extraction = result.object as Record<string, any>;
 			} catch (err) {
+				if (resolveOcrProcessingErrorCode(err)) throw err;
 				console.error("[tabla-rows:ocr-import] OCR extraction failed", err);
 			}
 		} else if (fetchedDocumentBytes && fetchedDocumentMime) {
@@ -1275,6 +1309,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 				);
 				extraction = result.object as Record<string, any>;
 			} catch (err) {
+				if (resolveOcrProcessingErrorCode(err)) throw err;
 				console.error("[tabla-rows:ocr-import] OCR extraction failed", err);
 			}
 		}
@@ -1286,6 +1321,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			if (rollbackReservation && reservationApplied && !tokensSettled) {
 				await rollbackReservation("ocr_extraction_failed");
 			}
+			await recordOcrObservation(supabase, ocrObservation, { phase: "failed", errorCode: "ocr_empty_result" });
 			return NextResponse.json(
 				{ error: "No se pudieron extraer datos de la imagen. Intentá con una imagen más nítida o con otro formato." },
 				{ status: 422 }
@@ -1361,6 +1397,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 							? 403
 							: 400;
 				await rollbackReservation("ocr_reservation_rollback");
+				await recordOcrObservation(supabase, ocrObservation, { phase: "failed", errorCode: "ocr_usage_limit" });
 				return NextResponse.json(
 					{
 						error:
@@ -1385,6 +1422,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			amount: actualTokenUsage > 0 ? actualTokenUsage : reservedTokens,
 			context: actualTokenUsage > 0 ? "ocr_import" : "ocr_reservation",
 			metadata: {
+				...operationCorrelation,
 				obraId: id,
 				tablaId,
 				storagePath: storageInfo?.path ?? null,
@@ -1395,6 +1433,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 		});
 
 		if (previewMode) {
+			await recordOcrObservation(supabase, ocrObservation, { phase: "completed", rowsExtracted: Array.isArray(extraction.items) ? extraction.items.length : 0 });
 			const meta: Record<string, unknown> = {};
 			for (const column of parentColumns) {
 				meta[column.fieldKey] = (extraction as any)[column.fieldKey] ?? null;
@@ -1415,7 +1454,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
-		if (!previewMode && !skipStorage) {
+		if (!previewMode && !skipStorage && (file || (typeof imageDataUrl === "string" && imageDataUrl.length > 0))) {
 			try {
 				storageInfo = await uploadSourceToStorage({
 					supabase,
@@ -1443,6 +1482,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 								amount: storageInfo.uploadedBytes,
 								context: "ocr_source_upload",
 								metadata: {
+									...operationCorrelation,
 									obraId: id,
 									tablaId,
 									path: storageInfo.path,
@@ -1466,6 +1506,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 									: err.code === "insufficient_privilege"
 										? 403
 										: 400;
+							await recordOcrObservation(supabase, ocrObservation, { phase: "failed", errorCode: "ocr_storage_limit" });
 							return NextResponse.json(
 								{
 									error:
@@ -1491,8 +1532,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			storageInfoForError = storageInfo;
 		}
 
-		const extractionId = randomUUID();
-		extractionIdForAudit = extractionId;
 		const fingerprintStatus =
 			fileFingerprint && contentFingerprintNormalized
 				? "completed"
@@ -1687,6 +1726,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			allowAutoWrite: await canAutoWriteDataFlow({ supabase, tenantId }),
 		});
 
+		await recordOcrObservation(supabase, ocrObservation, { phase: "completed", rowsExtracted: rowsPayload.length });
 		return NextResponse.json({
 			ok: true,
 			inserted: rowsPayload.length,
@@ -1706,6 +1746,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			resolveUnknownErrorMessage(error)
 		);
 		const errorCode = resolveOcrProcessingErrorCode(error);
+		if (ocrObservation && resolvedSupabase) {
+			await recordOcrObservation(resolvedSupabase, ocrObservation, { phase: "failed", errorCode: errorCode ?? "ocr_failed" });
+		}
 
 			if (
 				rollbackReservation &&
@@ -1776,7 +1819,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 			);
 		}
 
-		if (errorCode === OCR_PROVIDER_HIGH_DEMAND_ERROR_CODE) {
+		if (errorCode === OCR_PROVIDER_HIGH_DEMAND_ERROR_CODE || error instanceof OcrProviderUnavailableError) {
 			return NextResponse.json(
 				{ error: message, code: errorCode },
 				{ status: 503 },

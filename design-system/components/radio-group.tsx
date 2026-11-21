@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group"
 import { Circle } from "lucide-react"
@@ -35,7 +37,7 @@ export type RadioGroupProps = Omit<
 export const RadioGroup = React.forwardRef<
   React.ElementRef<typeof RadioGroupPrimitive.Root>,
   RadioGroupProps
->(({ className, size = "md", ...props }, ref) => (
+>(({ className, size = "sm", ...props }, ref) => (
   <RadioGroupSizeContext.Provider value={size}>
     <RadioGroupPrimitive.Root ref={ref} className={cn("grid gap-2", className)} {...props} />
   </RadioGroupSizeContext.Provider>

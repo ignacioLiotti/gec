@@ -70,6 +70,12 @@ export async function POST(
 	}
 
 	const body = await request.json();
+	const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "certificados:edit" });
+	if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+	if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para crear certificados" }, { status: 403 });
+	const obra = await supabase.from("obras").select("id").eq("id", id).eq("tenant_id", tenantId).is("deleted_at", null).maybeSingle();
+	if (obra.error) return NextResponse.json({ error: "No se pudo verificar la obra" }, { status: 500 });
+	if (!obra.data) return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 
 	const { data: certificate, error } = await supabase
 		.from("certificates")

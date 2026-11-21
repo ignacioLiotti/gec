@@ -1,3 +1,7 @@
+
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { notFound } from "next/navigation";
 import { submitWhatsAppRunResponse } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -116,10 +120,10 @@ function FormField({ field }: { field: Field }) {
 		return (
 			<label className="flex items-center justify-between gap-3 rounded-md border bg-neutral-50 px-3 py-3 text-sm">
 				<span className="font-medium">{field.label}</span>
-				<select name={`${field.key}__boolean`} className="h-9 rounded-md border bg-white px-3">
+				<NativeSelect name={`${field.key}__boolean`} className="h-9 px-3">
 					<option value="true">Si</option>
 					<option value="false">No</option>
-				</select>
+				</NativeSelect>
 			</label>
 		);
 	}
@@ -127,11 +131,11 @@ function FormField({ field }: { field: Field }) {
 		return (
 			<label className="space-y-1 text-sm">
 				<span className="font-medium">{field.label}</span>
-				<select name={field.key} required={field.required} className="h-10 w-full rounded-md border bg-white px-3">
+				<NativeSelect name={field.key} required={field.required} className="h-10 w-full px-3">
 					{field.options.map((option) => (
 						<option key={option} value={option}>{option}</option>
 					))}
-				</select>
+				</NativeSelect>
 			</label>
 		);
 	}
@@ -139,7 +143,7 @@ function FormField({ field }: { field: Field }) {
 		return (
 			<label className="space-y-1 text-sm">
 				<span className="font-medium">{field.label}</span>
-				<textarea name={field.key} required={field.required} rows={4} className="w-full rounded-md border bg-white px-3 py-2" />
+				<Textarea name={field.key} required={field.required} rows={4} className="w-full px-3 py-2" />
 			</label>
 		);
 	}
@@ -147,7 +151,7 @@ function FormField({ field }: { field: Field }) {
 	return (
 		<label className="space-y-1 text-sm">
 			<span className="font-medium">{field.label}</span>
-			<input name={field.key} type={inputType} required={field.required} className="h-10 w-full rounded-md border bg-white px-3" />
+			<Input name={field.key} type={inputType} required={field.required} className="h-10 w-full px-3" />
 		</label>
 	);
 }

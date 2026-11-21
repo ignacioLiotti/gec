@@ -61,7 +61,7 @@ import { DocumentApprovedSeal } from '@/components/document-approved-seal';
 import FolderFront from '@/components/ui/FolderFront';
 import { DocumentDataSheet } from './components/document-data-sheet';
 import type { SpreadsheetPreviewPayload, SpreadsheetPreviewTable } from './components/spreadsheet-preview-types';
-import { useDocumentsStore, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
+import { useDocumentsStore, getDocumentsState, needsRefetch, markDocumentsFetched, setDocumentsLoading } from './hooks/useDocumentsStore';
 import {
   normalizeFolderName,
   normalizeFolderPath,
@@ -191,6 +191,54 @@ const FormTable = dynamic(
 
 const DOCUMENTS_TREE_ENABLED = false;
 const DOCUMENTS_LIST_ENABLED = true;
+
+type DocumentsTreePayload = {
+  obraId: string;
+  requestedPath: string;
+  tree: FileSystemItem | null;
+  folder: FileSystemItem | null;
+  links: OcrFolderLink[];
+};
+
+type PendingDocumentsTreeRequest = {
+  obraId: string;
+  request: Promise<DocumentsTreePayload | null>;
+};
+
+function mergeDocumentsTreeSnapshot(
+  current: FileSystemItem | null,
+  incoming: FileSystemItem
+): FileSystemItem {
+  if (!current || current.id !== incoming.id || current.type !== incoming.type) {
+    return incoming;
+  }
+  if (incoming.type !== 'folder') {
+    return incoming;
+  }
+
+  const currentChildren = current.children ?? [];
+  const currentChildrenById = new Map(currentChildren.map((child) => [child.id, child]));
+  const incomingChildren = incoming.children ?? [];
+  const incomingChildrenById = new Map(incomingChildren.map((child) => [child.id, child]));
+  const mergeChild = (child: FileSystemItem) =>
+    mergeDocumentsTreeSnapshot(currentChildrenById.get(child.id) ?? null, child);
+  const children = incoming.childrenLoaded
+    ? incomingChildren.map(mergeChild)
+    : [
+        ...currentChildren.map((child) => {
+          const incomingChild = incomingChildrenById.get(child.id);
+          return incomingChild ? mergeDocumentsTreeSnapshot(child, incomingChild) : child;
+        }),
+        ...incomingChildren.filter((child) => !currentChildrenById.has(child.id)),
+      ];
+
+  return {
+    ...current,
+    ...incoming,
+    children,
+    childrenLoaded: Boolean(current.childrenLoaded || incoming.childrenLoaded),
+  };
+}
 
 // Re-export types for external consumers
 export type { FileManagerSelectionChange };
@@ -593,11 +641,13 @@ function FileManagerContent({
   const [selectedPdfPages, setSelectedPdfPages] = useState<number[]>([]);
   const selectedPdfPageSet = useMemo(() => new Set(selectedPdfPages), [selectedPdfPages]);
   const pdfPageSelectionResolverRef = useRef<((pages: number[] | null) => void) | null>(null);
-  const rateLimitUntilRef = useRef<number>(0);
-  const documentsTreeRequestRef = useRef<Promise<{ tree: FileSystemItem | null; folder?: FileSystemItem | null; links: OcrFolderLink[] } | null> | null>(null);
+  const rateLimitRef = useRef<{ obraId: string; until: number } | null>(null);
+  const documentsTreeRequestRef = useRef<PendingDocumentsTreeRequest | null>(null);
 
   useEffect(() => {
     if (!obraId) return;
+    documentsTreeRequestRef.current = null;
+    rateLimitRef.current = null;
     resetDocumentsStore(obraId);
     setLoadingFolderIds(new Set());
   }, [obraId, resetDocumentsStore]);
@@ -1238,17 +1288,19 @@ function FileManagerContent({
 
   const fetchDocumentsTreePayload = useCallback(async (options: { path?: string } = {}) => {
     if (!obraId) return null;
+    const requestedPath = normalizeFolderPath(options.path ?? '');
     // documents-tree stays disabled; folders/documents now load from a lightweight
     // endpoint that includes OCR folder/table metadata but not extracted rows.
     const documentsEndpoint = DOCUMENTS_TREE_ENABLED
       ? `/api/obras/${obraId}/documents-tree?limit=500`
       : DOCUMENTS_LIST_ENABLED
-        ? `/api/obras/${obraId}/documents/list${options.path ? `?path=${encodeURIComponent(options.path)}` : ''}`
+        ? `/api/obras/${obraId}/documents/list${requestedPath ? `?path=${encodeURIComponent(requestedPath)}` : ''}`
         : null;
     if (!documentsEndpoint) return null;
-    if (Date.now() < rateLimitUntilRef.current) return null;
-    if (!options.path && documentsTreeRequestRef.current) {
-      return documentsTreeRequestRef.current;
+    if (rateLimitRef.current?.obraId === obraId && Date.now() < rateLimitRef.current.until) return null;
+    const pendingRootRequest = documentsTreeRequestRef.current;
+    if (!requestedPath && pendingRootRequest?.obraId === obraId) {
+      return pendingRootRequest.request;
     }
 
     const request = (async () => {
@@ -1256,7 +1308,7 @@ function FileManagerContent({
         cache: 'no-store',
       });
       if (res.status === 429) {
-        rateLimitUntilRef.current = Date.now() + 30_000;
+        rateLimitRef.current = { obraId, until: Date.now() + 30_000 };
         return null;
       }
       if (!res.ok) {
@@ -1265,20 +1317,22 @@ function FileManagerContent({
       }
       const payload = await res.json().catch(() => ({}));
       return {
+        obraId,
+        requestedPath,
         tree: (payload?.tree ?? null) as FileSystemItem | null,
         folder: (payload?.folder ?? null) as FileSystemItem | null,
         links: Array.isArray(payload?.links) ? (payload.links as OcrFolderLink[]) : [],
       };
     })();
 
-    if (!options.path) {
-      documentsTreeRequestRef.current = request;
+    if (!requestedPath) {
+      documentsTreeRequestRef.current = { obraId, request };
     }
 
     try {
       return await request;
     } finally {
-      if (!options.path && documentsTreeRequestRef.current === request) {
+      if (!requestedPath && documentsTreeRequestRef.current?.request === request) {
         documentsTreeRequestRef.current = null;
       }
     }
@@ -1286,7 +1340,7 @@ function FileManagerContent({
 
   const refreshOcrFolderLinks = useCallback(async (options: { skipCache?: boolean } = {}) => {
     if (!obraId) return;
-    if (Date.now() < rateLimitUntilRef.current) return;
+    if (rateLimitRef.current?.obraId === obraId && Date.now() < rateLimitRef.current.until) return;
 
     // Check cache first (unless skipCache is true)
     if (!options.skipCache) {
@@ -1307,23 +1361,26 @@ function FileManagerContent({
     try {
       const payload = await fetchDocumentsTreePayload();
       if (!payload) {
-        markDocumentsFetched();
+        if (getDocumentsState().obraId === obraId) markDocumentsFetched();
         return;
       }
+      const { obraId: currentObraId, selectedFolder, selectedDocument, sheetDocument, expandedFolderIds } = getDocumentsState();
+      if (payload.obraId !== obraId || currentObraId !== obraId) return;
       const { links, tree } = payload;
       if (tree) {
-        rebuildParentMap(tree);
-        setCachedFileTree(obraId, tree);
-        setFileTree(tree);
+        const nextTree = mergeDocumentsTreeSnapshot(getDocumentsState().fileTree, tree);
+        rebuildParentMap(nextTree);
+        setCachedFileTree(obraId, nextTree);
+        setFileTree(nextTree);
         let resolvedFocusedFolderId: string | null = null;
         if (selectedFolder) {
-          const resolvedById = findFolderInTreeById(tree, selectedFolder.id);
+          const resolvedById = findFolderInTreeById(nextTree, selectedFolder.id);
           if (resolvedById) {
             setSelectedFolder(resolvedById);
             resolvedFocusedFolderId = resolvedById.id;
           } else {
             const selectedSegments = getSelectionFolderSegments(selectedFolder);
-            const resolvedFolder = findFolderInTreeBySegments(tree, selectedSegments);
+            const resolvedFolder = findFolderInTreeBySegments(nextTree, selectedSegments);
             if (resolvedFolder) {
               setSelectedFolder(resolvedFolder);
               resolvedFocusedFolderId = resolvedFolder.id;
@@ -1332,14 +1389,14 @@ function FileManagerContent({
         }
         const currentDocPath = (sheetDocument ?? selectedDocument)?.storagePath;
         if (currentDocPath) {
-          const updatedDoc = findDocumentInTreeByStoragePath(tree, currentDocPath);
+          const updatedDoc = findDocumentInTreeByStoragePath(nextTree, currentDocPath);
           if (updatedDoc) {
             if (selectedDocument) setSelectedDocument(updatedDoc);
             if (sheetDocument) setSheetDocument(updatedDoc);
           }
         }
         setExpandedFolderIds(
-          getExpandedFoldersForTree(tree, expandedFolderIds, resolvedFocusedFolderId ?? selectedFolder?.id ?? tree.id)
+          getExpandedFoldersForTree(nextTree, expandedFolderIds, resolvedFocusedFolderId ?? selectedFolder?.id ?? nextTree.id)
         );
       }
       setCachedOcrLinks(obraId, links);
@@ -1347,14 +1404,15 @@ function FileManagerContent({
     } catch (error) {
       console.error('Error refreshing OCR folder links', error);
     }
-  }, [expandedFolderIds, fetchDocumentsTreePayload, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setSelectedFolder, sheetDocument]);
+  }, [fetchDocumentsTreePayload, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument]);
 
   // Build file tree from storage
   const buildFileTree = useCallback(async (options: { skipCache?: boolean } = {}) => {
-    if (Date.now() < rateLimitUntilRef.current) return;
+    if (rateLimitRef.current?.obraId === obraId && Date.now() < rateLimitRef.current.until) return;
     if (!options.skipCache) {
       const cachedTree = getCachedFileTree(obraId);
       if (cachedTree) {
+        const { selectedFolder, expandedFolderIds } = getDocumentsState();
         rebuildParentMap(cachedTree);
         setFileTree(cachedTree);
         if (!selectedFolder) {
@@ -1370,35 +1428,39 @@ function FileManagerContent({
 
     setDocumentsLoading(true);
     try {
+      const selectedAtStart = getDocumentsState().selectedFolder;
       const selectedFolderPath =
-        DOCUMENTS_LIST_ENABLED && selectedFolder && selectedFolder.id !== 'root'
-          ? getSelectionFolderSegments(selectedFolder).join('/')
+        DOCUMENTS_LIST_ENABLED && selectedAtStart && selectedAtStart.id !== 'root'
+          ? getSelectionFolderSegments(selectedAtStart).join('/')
           : '';
       const payload = await fetchDocumentsTreePayload(
         selectedFolderPath ? { path: selectedFolderPath } : undefined
       );
       if (!payload) {
-        markDocumentsFetched();
+        if (getDocumentsState().obraId === obraId) markDocumentsFetched();
         return;
       }
+      const { obraId: currentObraId, selectedFolder, selectedDocument, sheetDocument, expandedFolderIds } = getDocumentsState();
+      if (payload.obraId !== obraId || currentObraId !== obraId) return;
       const { tree, links } = payload;
       if (tree) {
-        rebuildParentMap(tree);
-        setCachedFileTree(obraId, tree);
-        setFileTree(tree);
+        const nextTree = mergeDocumentsTreeSnapshot(getDocumentsState().fileTree, tree);
+        rebuildParentMap(nextTree);
+        setCachedFileTree(obraId, nextTree);
+        setFileTree(nextTree);
         let resolvedFocusedFolderId: string | null = null;
         if (!selectedFolder) {
-          setSelectedFolder(tree);
-          resolvedFocusedFolderId = tree.id;
+          setSelectedFolder(nextTree);
+          resolvedFocusedFolderId = nextTree.id;
         }
         if (selectedFolder) {
-          const resolvedById = findFolderInTreeById(tree, selectedFolder.id);
+          const resolvedById = findFolderInTreeById(nextTree, selectedFolder.id);
           if (resolvedById) {
             setSelectedFolder(resolvedById);
             resolvedFocusedFolderId = resolvedById.id;
           } else {
             const selectedSegments = getSelectionFolderSegments(selectedFolder);
-            const resolvedFolder = findFolderInTreeBySegments(tree, selectedSegments);
+            const resolvedFolder = findFolderInTreeBySegments(nextTree, selectedSegments);
             if (resolvedFolder) {
               setSelectedFolder(resolvedFolder);
               resolvedFocusedFolderId = resolvedFolder.id;
@@ -1407,14 +1469,14 @@ function FileManagerContent({
         }
         const currentDocPath = (sheetDocument ?? selectedDocument)?.storagePath;
         if (currentDocPath) {
-          const updatedDoc = findDocumentInTreeByStoragePath(tree, currentDocPath);
+          const updatedDoc = findDocumentInTreeByStoragePath(nextTree, currentDocPath);
           if (updatedDoc) {
             if (selectedDocument) setSelectedDocument(updatedDoc);
             if (sheetDocument) setSheetDocument(updatedDoc);
           }
         }
         setExpandedFolderIds(
-          getExpandedFoldersForTree(tree, expandedFolderIds, resolvedFocusedFolderId ?? selectedFolder?.id ?? tree.id)
+          getExpandedFoldersForTree(nextTree, expandedFolderIds, resolvedFocusedFolderId ?? selectedFolder?.id ?? nextTree.id)
         );
       }
       setCachedOcrLinks(obraId, links);
@@ -1429,9 +1491,9 @@ function FileManagerContent({
       }
       toast.error('Error loading documents');
     } finally {
-      markDocumentsFetched();
+      if (getDocumentsState().obraId === obraId) markDocumentsFetched();
     }
-  }, [expandedFolderIds, fetchDocumentsTreePayload, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, selectedDocument, selectedFolder, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument, sheetDocument]);
+  }, [fetchDocumentsTreePayload, findDocumentInTreeByStoragePath, findFolderInTreeById, findFolderInTreeBySegments, getExpandedFoldersForTree, getSelectionFolderSegments, obraId, rebuildParentMap, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedDocument, setSelectedFolder, setSheetDocument]);
 
   const refreshFileTreeDerivedData = useCallback(async () => {
     await buildFileTree({ skipCache: true });
@@ -1619,15 +1681,23 @@ function FileManagerContent({
     try {
       const payload = await fetchDocumentsTreePayload({ path: folderPath });
       const loadedFolder = payload?.folder ?? null;
-      if (!loadedFolder || !fileTree) return folder;
-      const nextTree = replaceFolderInTree(fileTree, loadedFolder);
+      const currentState = getDocumentsState();
+      if (
+        !loadedFolder ||
+        !currentState.fileTree ||
+        payload?.obraId !== obraId ||
+        payload.requestedPath !== folderPath ||
+        currentState.obraId !== obraId
+      ) return folder;
+      if (!findFolderInTreeById(currentState.fileTree, folder.id)) return folder;
+      const nextTree = replaceFolderInTree(currentState.fileTree, loadedFolder);
       if (!nextTree) return loadedFolder;
       rebuildParentMap(nextTree);
       setFileTree(nextTree);
       setCachedFileTree(obraId, nextTree);
-      setSelectedFolder(loadedFolder);
+      if (currentState.selectedFolder?.id === folder.id) setSelectedFolder(loadedFolder);
       setExpandedFolderIds(
-        getExpandedFoldersForTree(nextTree, expandedFolderIds, loadedFolder.id)
+        getExpandedFoldersForTree(nextTree, currentState.expandedFolderIds, currentState.selectedFolder?.id ?? nextTree.id)
       );
       if (payload?.links) {
         setCachedOcrLinks(obraId, payload.links);
@@ -1646,7 +1716,7 @@ function FileManagerContent({
         return next;
       });
     }
-  }, [expandedFolderIds, fetchDocumentsTreePayload, fileTree, getExpandedFoldersForTree, obraId, rebuildParentMap, replaceFolderInTree, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedFolder]);
+  }, [fetchDocumentsTreePayload, findFolderInTreeById, getExpandedFoldersForTree, obraId, rebuildParentMap, replaceFolderInTree, setExpandedFolderIds, setFileTree, setOcrFolderLinks, setSelectedFolder]);
 
   const addUploadedFilesToTree = useCallback((folder: FileSystemItem | null | undefined, files: FileSystemItem[]) => {
     if (!folder || folder.type !== 'folder' || files.length === 0) return;
@@ -1675,6 +1745,12 @@ function FileManagerContent({
   }, [findFolderInTreeById, obraId, rebuildParentMap, selectedFolder?.id, setFileTree, setSelectedFolder]);
 
   const handleFolderClick = useCallback((folder: FileSystemItem, options: SelectionChangeOptions = {}) => {
+    const shouldEmitSelection = options.emitSelection !== false;
+    const folderPath = shouldEmitSelection ? getPathSegments(folder) : [];
+    if (shouldEmitSelection) {
+      pendingFolderPathRef.current = folderPath.join('/');
+    }
+
     setSelectedFolder(folder);
     setSelectedDocument(null);
     setSheetDocument(null);
@@ -1685,11 +1761,9 @@ function FileManagerContent({
     ensureAncestorsExpanded(folder);
     void loadFolderChildren(folder);
 
-    if (options.emitSelection === false) {
+    if (!shouldEmitSelection) {
       return;
     }
-    const folderPath = getPathSegments(folder);
-    pendingFolderPathRef.current = folderPath.join('/');
     onSelectionChange?.({
       folder,
       folderPath,
@@ -1893,8 +1967,14 @@ function FileManagerContent({
 
   useEffect(() => {
     if (!fileTree) return;
+    const pendingFolderPathKey = pendingFolderPathRef.current;
+    if (pendingFolderPathKey !== null && pendingFolderPathKey !== folderPathKey) {
+      return;
+    }
     if (folderPathSegments.length === 0) {
-      if (pendingFolderPathRef.current) return;
+      if (pendingFolderPathKey === folderPathKey) {
+        pendingFolderPathRef.current = null;
+      }
       if (!selectedFolderId || selectedFolderId !== fileTree.id) {
         handleFolderClick(fileTree, { emitSelection: false });
       }
@@ -1907,7 +1987,7 @@ function FileManagerContent({
         handleFolderClick(folderFromPath, { emitSelection: false });
       }
     }
-    if (pendingFolderPathRef.current === folderPathKey) {
+    if (folderFromPath && pendingFolderPathKey === folderPathKey) {
       pendingFolderPathRef.current = null;
     }
   }, [ensureAncestorsExpanded, fileTree, folderPathKey, folderPathSegments, selectedFolderId, handleFolderClick, findFolderBySegments]);
@@ -3182,6 +3262,7 @@ function FileManagerContent({
                 serverMessage: typeof out?.error === 'string' ? out.error : null,
                 fallbackMessage: `No se pudieron extraer datos para las tablas OCR (HTTP ${importRes.status}).`,
               });
+              await refreshFileTreeDerivedData();
               continue;
             }
             if (!importRes.ok) {
@@ -3248,7 +3329,7 @@ function FileManagerContent({
       setUploadingFiles(false);
       setCurrentUploadFolder(null);
     }
-  }, [addUploadedFilesToTree, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, fetchUsageInfo, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, queryClient, refreshOcrFolderLinks, sanitizeStorageFileName, selectedFolder]);
+  }, [addUploadedFilesToTree, buildFileTree, ensureStorageCapacity, fetchSpreadsheetPreview, fileTree, fetchUsageInfo, getAutoSelectedSpreadsheetTablaIds, getPathSegments, obraId, ocrFolderLinksMap, ocrTablaMap, onRefreshMaterials, openSpreadsheetPreview, openTableSelectionDialog, queryClient, refreshFileTreeDerivedData, refreshOcrFolderLinks, sanitizeStorageFileName, selectedFolder]);
 
   const handleDocumentAreaDragOver = useCallback((event: React.DragEvent<HTMLElement>) => {
     if (containsFolderMove(event.dataTransfer)) return;
@@ -3962,12 +4043,12 @@ function FileManagerContent({
                 <Download className="size-4 mr-2" />
                 Descargar
               </Button>
-              <button
+              <Button variant="outline"
                 onClick={() => setSourceFileModal(null)}
-                className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
+                className="p-1.5 transition-colors"
               >
                 <X className="size-5" />
-              </button>
+              </Button>
             </div>
           </div>
           <div className="flex-1 overflow-hidden">
@@ -5777,14 +5858,14 @@ function FileManagerContent({
               <div className="flex h-full flex-col">
                 {selectedFolder.ocrEnabled && hasTablaSchema && ocrDocumentFilterPath && documentViewMode === 'table' && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 px-4">
-                    <Badge variant="outline" className="text-[11px] bg-amber-50 border-amber-200 text-amber-800">
+                    <Badge variant={"warning"} className="text-[11px]">
                       Filtrando: {ocrDocumentFilterName ?? 'Documento seleccionado'}
                     </Badge>
                     <Button
                       variant="ghost"
                       size="xs"
                       onClick={clearOcrDocumentFilter}
-                      className="h-6 px-2 text-amber-800 hover:text-amber-900"
+                      className="h-6 px-2"
                     >
                       Ver todos
                     </Button>
@@ -6386,7 +6467,7 @@ function FileManagerContent({
                                   </p>
                                 </div>
                                 {selectedSheet ? (
-                                  <Badge variant="outline" className="max-w-40 truncate border-emerald-300 bg-white text-emerald-700">
+                                  <Badge variant={"success"} className="max-w-40 truncate">
                                     {selectedSheet}
                                   </Badge>
                                 ) : null}
@@ -6404,7 +6485,7 @@ function FileManagerContent({
                                 }
                                 disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
                               >
-                                <SelectTrigger className="mt-1.5 h-9 w-full border-emerald-300 bg-background">
+                                <SelectTrigger className="mt-1.5 h-9 w-full">
                                   <SelectValue placeholder="Seleccionar hoja" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -6498,7 +6579,7 @@ function FileManagerContent({
                                 </p>
                               </div>
                               {table ? (
-                                <Badge variant="outline" className="max-w-48 truncate border-orange-300 bg-white text-orange-700">
+                                <Badge variant={"default"} className="max-w-48 truncate">
                                   {table.tablaName}
                                 </Badge>
                               ) : null}
@@ -6514,7 +6595,7 @@ function FileManagerContent({
                               }}
                               disabled={isLoadingSpreadsheetPreview || isApplyingSpreadsheetPreview}
                             >
-                              <SelectTrigger className="mt-1.5 h-9 w-full border-orange-300 bg-background">
+                              <SelectTrigger className="mt-1.5 h-9 w-full">
                                 <SelectValue placeholder="Seleccionar paso" />
                               </SelectTrigger>
                               <SelectContent>
@@ -7153,12 +7234,12 @@ function FileManagerContent({
                           </div>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant={"destructiveSecondary"}
                             size="sm"
                             onClick={() => {
                               setNewFolderColumns(prev => prev.filter(c => c.id !== column.id));
                             }}
-                            className="size-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            className="size-8 p-0"
                           >
                             <Trash2 className="size-4" />
                           </Button>

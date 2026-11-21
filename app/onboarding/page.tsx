@@ -181,7 +181,7 @@ function OnboardingPageContent() {
 	if (loadError) {
 		return (
 			<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
-				<Card className="w-full max-w-lg border-stroke-soft shadow-card">
+				<Card className="w-full max-w-lg">
 					<CardHeader>
 						<div className="flex justify-end">
 							<OnboardingSignOut />
@@ -201,7 +201,7 @@ function OnboardingPageContent() {
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-canvas p-4">
-			<Card className="w-full max-w-2xl border-stroke-soft shadow-card">
+			<Card className="w-full max-w-2xl">
 				<CardHeader className="text-center">
 					<div className="flex justify-end">
 						<OnboardingSignOut />
@@ -310,7 +310,7 @@ function OnboardingPageContent() {
 										}).format(expiresAt);
 
 										return (
-											<Card key={invitation.id} className="border-2 hover:border-[#ff5800]/30 transition-colors">
+											<Card key={invitation.id} className="border-2 transition-colors">
 												<CardContent className="p-4">
 													<div className="flex items-start justify-between gap-4">
 														<div className="flex-1 space-y-2">
@@ -351,7 +351,7 @@ function OnboardingPageContent() {
 															<Button
 																onClick={() => handleAcceptInvitation(invitation)}
 																disabled={acceptingId === invitation.id}
-																className="bg-[#ff5800] hover:bg-[#e64f00]"
+
 															>
 																{acceptingId === invitation.id ? (
 																	<>
@@ -394,7 +394,7 @@ function OnboardingPageContent() {
 								<p className="text-sm leading-6 text-[#666666]">
 									Solo te pediremos el nombre. El modelo recomendado se prepara automáticamente y después verás una lista corta para completar la primera obra.
 								</p>
-								<Button type="button" onClick={() => push("/tenants/new")} className="mt-4 w-full bg-[#ff5800] hover:bg-[#e64f00]">
+								<Button type="button" onClick={() => push("/tenants/new")} className="mt-4 w-full">
 									<Plus className="mr-2 size-4" />
 									Crear mi organización
 								</Button>

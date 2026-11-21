@@ -142,6 +142,8 @@ whatsapp_flows
 
 When an authorized contact sends `hola`, `menu`, `flow`, or `flows`, the webhook sends a WhatsApp interactive list with up to three active flows. Selecting one creates a `whatsapp_flow_runs` row, writes a pending `whatsapp_chat_actions` row, and replies with a secure `/whatsapp/flow/{runId}?token=...` URL. The response page is rendered from `whatsapp_flows.definition.fields` and saves the answer as a `whatsapp_manual_submissions` row linked back to the flow run and chat action.
 
+Signed form links work without a Supabase login. Both page entry and form submission verify the run-bound HMAC. Sintesis-hosted flow responses also require a persisted `sent` run with a future `expires_at`. A form opened earlier is checked again on submission. Closed runs display `Respuesta no disponible` with the reason instead of accepting another answer.
+
 This is intentionally a Sintesis-hosted flow editor/tester. It does not yet publish or sync native Meta WhatsApp Flows JSON. A future Meta Flow sync can reuse `whatsapp_flows.meta_flow_id`, `definition`, and `settings` once the tenant has approved Meta templates that open native flows.
 
 ### Reusable Native Flow Pattern

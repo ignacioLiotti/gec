@@ -195,12 +195,7 @@ function ReprocessOcrButton({
 			disabled={retryingOcr}
 			onClick={() => onRetryOcr(document)}
 			title={retryingOcr ? "Reprocesando OCR" : "Reprocesar OCR"}
-			className={cn(
-				"shrink-0 gap-2 border border-[#ff5800] bg-[#ff5800] font-semibold text-white shadow-[0_10px_24px_rgba(255,88,0,0.32)] hover:border-[#e64f00] hover:bg-[#e64f00] hover:text-white focus-visible:ring-[#ff5800]/45 disabled:border-orange-300 disabled:bg-orange-300 disabled:text-white",
-				compact && "px-2 sm:px-3",
-				highlight &&
-					"border-[#ff3d00] bg-[#ff3d00] shadow-[0_0_0_2px_rgba(255,88,0,0.28),0_14px_34px_rgba(255,61,0,0.38)] hover:border-[#d93400] hover:bg-[#d93400]"
-			)}
+			className={cn("shrink-0 gap-2 font-semibold", compact && "px-2 sm:px-3")}
 		>
 			{retryingOcr ? (
 				<Loader2 className="size-4 animate-spin" />
@@ -230,7 +225,7 @@ function DataSheetToggleButton({
 			onClick={onToggleDataSheet}
 			title={isDataSheetOpen ? "Ocultar datos extraidos" : "Ver datos extraidos"}
 			className={cn(
-				"shrink-0 gap-2 border border-[#0f766e] bg-[#0f766e] font-semibold text-white shadow-[0_10px_24px_rgba(15,118,110,0.28)] hover:border-[#0d665f] hover:bg-[#0d665f] hover:text-white focus-visible:ring-[#0f766e]/45",
+				"shrink-0 gap-2 font-semibold",
 				compact && "px-2 sm:px-3"
 			)}
 		>
@@ -421,7 +416,7 @@ function SpreadsheetLikePreview({
 					))}
 				</div>
 			) : null}
-			<div className={cn("min-h-0 flex-1", sheets.length <= 1 ? "pt-16" : "")}>
+			<div className={cn("min-h-0 flex-1", sheets.length <= 1 ? ("pt-16") : (""))}>
 				<ExcelGrid sheet={selectedSheet} />
 			</div>
 		</div>

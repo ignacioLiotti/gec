@@ -12,5 +12,9 @@ export default defineConfig([
     "build/**",
     "next-env.d.ts",
     ".claude/worktrees/**",
+    ".codex-tmp/**",
+    "storybook-static/**",
+    "portfolio-guide/dist/**",
+    "portfolio-guide/artifacts/**",
   ]),
 ]);

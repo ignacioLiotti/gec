@@ -1266,7 +1266,7 @@ export async function PUT(request: Request) {
 			try {
 				if (ctx.obra.id) {
 					await updateInsurancePoliciesForObraCompletion({
-						supabase,
+						supabase: createSupabaseAdminClient(),
 						tenantId,
 						obraId: ctx.obra.id,
 						finishedAt: new Date().toISOString().slice(0, 10),
@@ -1360,12 +1360,14 @@ export async function PUT(request: Request) {
 	// Handle obras that were reverted from completed back to incomplete:
 	// remove any calendar events that were created for them by flujo actions.
 	if (newlyIncomplete.length > 0) {
+		const revertedIds: string[] = [];
 		try {
 			const revertedNs = newlyIncomplete.map((obra) => obra.n);
-			const revertedIds =
+			revertedIds.push(...(
 				existingRows
 					?.filter((row) => revertedNs.includes(row.n))
-					.map((row) => row.id) ?? [];
+					.map((row) => row.id) ?? []
+			));
 
 			if (revertedIds.length > 0) {
 				const { error: delErr } = await supabase
@@ -1389,6 +1391,27 @@ export async function PUT(request: Request) {
 				"Obras PUT: unexpected error while cleaning up calendar_events for reverted obras",
 				revertError,
 			);
+		}
+
+		for (const revertedId of revertedIds) {
+			try {
+				await updateInsurancePoliciesForObraCompletion({
+					supabase: createSupabaseAdminClient(),
+					tenantId,
+					obraId: revertedId,
+					finishedAt: null,
+				});
+				await syncInsurancePoliciesToMacroTable({
+					supabase,
+					tenantId,
+					obraIds: [revertedId],
+				});
+			} catch (insuranceError) {
+				console.error(
+					"Obras PUT: error clearing insurance policy completion dates",
+					{ obraId: revertedId, error: insuranceError },
+				);
+			}
 		}
 	}
 

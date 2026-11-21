@@ -542,12 +542,7 @@ export function AddRowDialog({
             value={String(value ?? "")}
             onChange={(event) => handleFieldChange(column.fieldKey, event.target.value)}
             placeholder={column.dataType === "currency" ? "0.00" : "0"}
-            className={cn(
-              "w-full rounded-md border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900",
-              "placeholder:text-stone-400",
-              "focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20",
-              "transition-all duration-200"
-            )}
+            className={cn("w-full px-3 py-2.5 text-sm", "transition-all duration-200")}
           />
         );
       case "date":
@@ -557,11 +552,7 @@ export function AddRowDialog({
             type="date"
             value={String(value ?? "")}
             onChange={(event) => handleFieldChange(column.fieldKey, event.target.value)}
-            className={cn(
-              "w-full rounded-md border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900",
-              "focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20",
-              "transition-all duration-200"
-            )}
+            className={cn("w-full px-3 py-2.5 text-sm", "transition-all duration-200")}
           />
         );
       default:
@@ -572,12 +563,7 @@ export function AddRowDialog({
             value={String(value ?? "")}
             onChange={(event) => handleFieldChange(column.fieldKey, event.target.value)}
             placeholder={`Ingresa ${column.label.toLowerCase()}`}
-            className={cn(
-              "w-full rounded-md border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900",
-              "placeholder:text-stone-400",
-              "focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20",
-              "transition-all duration-200"
-            )}
+            className={cn("w-full px-3 py-2.5 text-sm", "transition-all duration-200")}
           />
         );
     }
@@ -587,9 +573,7 @@ export function AddRowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className={cn(
-          "w-full max-w-2xl rounded-none border-none bg-transparent p-0 shadow-none"
-        )}
+        className={"w-full max-w-2xl p-0"}
       >
         <form
           onSubmit={(event) => {
@@ -667,7 +651,7 @@ export function AddRowDialog({
                         value={csvText}
                         onChange={(event) => setCsvText(event.target.value)}
                         placeholder={columns.map((column) => column.label).join(", ")}
-                        className="min-h-40 resize-y bg-white"
+                        className="min-h-40 resize-y"
                       />
                       {csvPreview && "error" in csvPreview ? (
                         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">

@@ -1,22 +1,20 @@
-import crypto from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import type { APIRequestContext } from "@playwright/test";
+import { expect, test } from "../../fixtures/test";
+import { z } from "zod";
 
 import {
-	cleanupLineageFixture,
-	cleanupSimpleFixture,
-	createLineageFixture,
-	createOcrMultiLineageFixture,
-	createSpreadsheetLineageFixture,
 	fetchLineageGraph,
-	getLineageAdminClient,
 	importOcrMultiStub,
 	importOcrStub,
 	importSpreadsheetMultiCsv,
 	saveMacroOverride,
-	type LineageFixture,
-	type OcrMultiLineageFixture,
-	type SpreadsheetLineageFixture,
 } from "../../helpers/lineage";
+
+const rowsResponseSchema = z.object({
+	rows: z.array(z.record(z.unknown())).optional(),
+});
+const extractionResponseSchema = z.object({ extractionId: z.string().optional() });
+const errorCodeResponseSchema = z.object({ code: z.string().optional() });
 
 async function fetchRowsForTable(
 	request: APIRequestContext,
@@ -24,30 +22,25 @@ async function fetchRowsForTable(
 ) {
 	const response = await request.get(`/api/obras/${args.obraId}/tablas/${args.tablaId}/rows`);
 	expect(response.ok()).toBeTruthy();
-	const payload = (await response.json()) as { rows?: Array<Record<string, unknown>> };
-	return Array.isArray(payload.rows) ? payload.rows : [];
+	const payload = rowsResponseSchema.parse(await response.json());
+	return payload.rows ?? [];
 }
 
+function hasStringErrorCode(value: unknown) {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value) &&
+		"errorCode" in value &&
+		typeof value.errorCode === "string"
+	);
+}
+
+// The application routes and persistence are real; OCR extraction and storage upload
+// are deterministic provider-boundary stubs supplied by the import helpers.
 test.describe("Ticket 1.2A lineage contract extension", () => {
-	const simpleFixtures: Array<OcrMultiLineageFixture | SpreadsheetLineageFixture> = [];
-	const fullFixtures: LineageFixture[] = [];
-
-	test.afterEach(async () => {
-		while (simpleFixtures.length > 0) {
-			const fixture = simpleFixtures.pop();
-			if (!fixture) continue;
-			await cleanupSimpleFixture(fixture);
-		}
-		while (fullFixtures.length > 0) {
-			const fixture = fullFixtures.pop();
-			if (!fixture) continue;
-			await cleanupLineageFixture(fixture);
-		}
-	});
-
-	test("ocr-multi reimport preserves stable identity across tables", async ({ request }) => {
-		const fixture = await createOcrMultiLineageFixture(request, "Reimport");
-		simpleFixtures.push(fixture);
+	test("ocr-multi reimport preserves stable identity across tables", async ({ request, scenario }) => {
+		const fixture = await scenario.lineage.createOcrMulti("Reimport");
 
 		const firstImport = await importOcrMultiStub(request, fixture, {
 			docKey: "ocr-multi-reimport",
@@ -63,7 +56,7 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 			},
 		});
 		expect(firstImport.ok()).toBeTruthy();
-		const firstPayload = (await firstImport.json()) as { extractionId?: string };
+		const firstPayload = extractionResponseSchema.parse(await firstImport.json());
 
 		const firstRowsByTable = await Promise.all(
 			fixture.tablaIds.map((tablaId) => fetchRowsForTable(request, { obraId: fixture.obraId, tablaId })),
@@ -91,7 +84,7 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 			},
 		});
 		expect(secondImport.ok()).toBeTruthy();
-		const secondPayload = (await secondImport.json()) as { extractionId?: string };
+		const secondPayload = extractionResponseSchema.parse(await secondImport.json());
 		expect(secondPayload.extractionId).not.toBe(firstPayload.extractionId);
 
 		for (const [index, tablaId] of fixture.tablaIds.entries()) {
@@ -109,9 +102,8 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 		}
 	});
 
-	test("ocr-multi conflict persists explicit error_code for affected tables", async ({ request }) => {
-		const fixture = await createOcrMultiLineageFixture(request, "Conflict");
-		simpleFixtures.push(fixture);
+	test("ocr-multi conflict persists explicit error_code for affected tables", async ({ request, scenario }) => {
+		const fixture = await scenario.lineage.createOcrMulti("Conflict");
 
 		const response = await importOcrMultiStub(request, fixture, {
 			docKey: "ocr-multi-conflict",
@@ -132,11 +124,11 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 		});
 
 		expect(response.status()).toBe(409);
-		const payload = (await response.json()) as { code?: string };
+		const payload = errorCodeResponseSchema.parse(await response.json());
 		expect(payload.code).toBe("LINEAGE_RECONCILIATION_CONFLICT");
 
-		const admin = getLineageAdminClient();
-		const { data: processing, error } = await admin
+		const owner = await scenario.actor("owner");
+		const { data: processing, error } = await owner.db
 			.from("ocr_document_processing")
 			.select("tabla_id, status, error_code")
 			.in("tabla_id", fixture.tablaIds)
@@ -154,16 +146,16 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 
 	test("spreadsheet-multi reimport preserves stable identity with conservative lineage contract", async ({
 		request,
+		scenario,
 	}) => {
-		const fixture = await createSpreadsheetLineageFixture(request, "Reimport");
-		simpleFixtures.push(fixture);
+		const fixture = await scenario.lineage.createSpreadsheet("Reimport");
 
 		const firstImport = await importSpreadsheetMultiCsv(request, fixture, {
 			docKey: "spreadsheet-lineage",
 			csv: ["cert_id,description,amount", "CERT-001,Primera fila,100"].join("\n"),
 		});
 		expect(firstImport.ok()).toBeTruthy();
-		const firstPayload = (await firstImport.json()) as { extractionId?: string };
+		const firstPayload = extractionResponseSchema.parse(await firstImport.json());
 
 		const firstRows = await fetchRowsForTable(request, {
 			obraId: fixture.obraId,
@@ -178,7 +170,7 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 			csv: ["cert_id,description,amount", "CERT-001,Segunda fila,150"].join("\n"),
 		});
 		expect(secondImport.ok()).toBeTruthy();
-		const secondPayload = (await secondImport.json()) as { extractionId?: string };
+		const secondPayload = extractionResponseSchema.parse(await secondImport.json());
 		expect(secondPayload.extractionId).not.toBe(firstPayload.extractionId);
 
 		const rows = await fetchRowsForTable(request, {
@@ -196,9 +188,9 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 
 	test("lineage graph exposes real macro_table and override nodes with downstream states", async ({
 		request,
+		scenario,
 	}) => {
-		const fixture = await createLineageFixture(request, "Graph");
-		fullFixtures.push(fixture);
+		const fixture = await scenario.lineage.createSingle("Graph");
 
 		const importResponse = await importOcrStub(request, fixture, {
 			docKey: "graph-doc",
@@ -229,20 +221,10 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 			stableNodes.some((node) => node.type === "override" && node.status === "stable"),
 		).toBeTruthy();
 
-		const admin = getLineageAdminClient();
-		const { error: injectedConflictError } = await admin
-			.from("macro_table_custom_values")
-			.insert({
-				macro_table_id: fixture.macroTableId,
-				source_row_id: crypto.randomUUID(),
-				source_tabla_id: fixture.tablaId,
-				lineage_row_key: lineageRowKey,
-				column_id: fixture.macroCustomColumnId,
-				value: "legacy conflict",
-				binding_status: "legacy",
-				binding_error: null,
-			});
-		expect(injectedConflictError).toBeNull();
+		await scenario.lineage.injectLegacyConflict(fixture, {
+			lineageRowKey,
+			value: "legacy conflict",
+		});
 
 		const conflictResponse = await saveMacroOverride(
 			request,
@@ -263,7 +245,7 @@ test.describe("Ticket 1.2A lineage contract extension", () => {
 				(node) =>
 					node.type === "override" &&
 					node.status === "conflict" &&
-					typeof (node.data as Record<string, unknown>)?.errorCode === "string",
+					hasStringErrorCode(node.data),
 			),
 		).toBeTruthy();
 		expect(Number(conflictGraph.summary?.macroTables ?? 0)).toBeGreaterThan(0);

@@ -27,6 +27,10 @@ export async function PATCH(
     return NextResponse.json({ error: "No se encontró una organización para el usuario" }, { status: 400 });
   }
 
+  const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "certificados:edit" });
+  if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+  if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para editar certificados" }, { status: 403 });
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -51,11 +55,13 @@ export async function PATCH(
     .eq("id", id)
     .eq("tenant_id", tenantId)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  if (!data) return NextResponse.json({ error: "Certificado no encontrado" }, { status: 404 });
 
   return NextResponse.json({ certificate: data });
 }
@@ -84,6 +90,10 @@ export async function DELETE(
       { status: 404 }
     );
   }
+
+  const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "certificados:admin" });
+  if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+  if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para eliminar certificados" }, { status: 403 });
 
   const { data: certificate, error: fetchError } = await supabase
     .from("certificates")

@@ -297,7 +297,7 @@ export function ExcelObraName({ staticObra = null }: { staticObra?: ObraSummary 
           <Button
             type="button"
             size="sm"
-            className="h-8 shrink-0 gap-1.5 rounded-lg  px-2.5 mr-3 ml-2"
+            className="h-8 shrink-0 gap-1.5 px-2.5 mr-3 ml-2"
             onMouseEnter={() => prefetch("/excel")}
             onFocus={() => prefetch("/excel")}
             onClick={handleBackToExcel}
@@ -400,7 +400,7 @@ export function ExcelObraName({ staticObra = null }: { staticObra?: ObraSummary 
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+              className="size-8"
               onMouseEnter={() => prefetchObraRoute(obraState.previousObra)}
               onFocus={() => prefetchObraRoute(obraState.previousObra)}
               onClick={() => handleNavigateToObra(obraState.previousObra)}
@@ -419,7 +419,7 @@ export function ExcelObraName({ staticObra = null }: { staticObra?: ObraSummary 
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+              className="size-8"
               onMouseEnter={() => prefetchObraRoute(obraState.nextObra)}
               onFocus={() => prefetchObraRoute(obraState.nextObra)}
               onClick={() => handleNavigateToObra(obraState.nextObra)}

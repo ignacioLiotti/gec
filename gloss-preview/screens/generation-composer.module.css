@@ -1,0 +1,418 @@
+.composer {
+  container: document-composer / inline-size;
+  min-inline-size: 0;
+  border: 1px solid var(--gp-line);
+  border-radius: 16px;
+  background: var(--gp-panel);
+  box-shadow: var(--shadow-card);
+}
+
+.composerHeader,
+.section {
+  min-inline-size: 0;
+  padding: 18px;
+}
+
+.composerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.composerHeader h2,
+.composerHeader p,
+.sectionHeading h3,
+.sectionHeading small,
+.fieldError,
+.fieldHint,
+.emptyRows p,
+.emptyRows span {
+  margin: 0;
+}
+
+.composerHeader h2 {
+  color: var(--gp-ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.composerHeader p {
+  margin-block-start: 4px;
+  color: var(--gp-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.composerHeader > small,
+.sectionHeading small {
+  flex: none;
+  color: var(--gp-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.section {
+  border-block-start: 1px solid var(--gp-line);
+  scroll-margin-block-start: 16px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-block-end: 14px;
+}
+
+.sectionHeading > span {
+  color: var(--gp-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.sectionHeading h3 {
+  color: var(--gp-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sectionHeading > div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.headerFields,
+.supplierFields,
+.conditionsFields {
+  display: grid;
+  min-inline-size: 0;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  min-inline-size: 0;
+  gap: 7px;
+}
+
+.field > label,
+.mobileCellLabel {
+  color: var(--gp-secondary);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.3;
+}
+
+.field :global([data-slot="input"]),
+.field :global([data-slot="textarea"]) {
+  min-block-size: 44px;
+  font-family: inherit;
+}
+
+.field :global([data-slot="textarea"]) {
+  min-block-size: 96px;
+  resize: vertical;
+}
+
+.fieldError,
+.sectionError {
+  color: var(--destructive);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.fieldHint {
+  color: var(--gp-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.itemsHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 14px;
+}
+
+.itemsHeading .sectionHeading {
+  margin-block-end: 0;
+}
+
+.addButton,
+.undoButton,
+.rowAction {
+  min-block-size: 44px;
+}
+
+.materialsTable,
+.tableBody,
+.materialRow {
+  min-inline-size: 0;
+}
+
+.materialsTable {
+  display: grid;
+  gap: 10px;
+}
+
+.tableHeader {
+  display: none;
+}
+
+.tableBody {
+  display: grid;
+  gap: 10px;
+}
+
+.materialRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 14px;
+  border-block-start: 1px solid var(--gp-line);
+}
+
+.descriptionCell,
+.amountCell,
+.actionsCell {
+  grid-column: 1 / -1;
+}
+
+.tableCell {
+  min-inline-size: 0;
+}
+
+.rowField {
+  block-size: 100%;
+}
+
+.amountCell,
+.actionsCell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amountCell output {
+  color: var(--gp-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rowAction {
+  padding-inline: 12px;
+}
+
+.actionText {
+  display: inline;
+}
+
+.emptyRows {
+  display: grid;
+  gap: 3px;
+  padding-block: 18px;
+  border-block: 1px solid var(--gp-line);
+  text-align: center;
+}
+
+.emptyRows p {
+  color: var(--gp-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.emptyRows span {
+  color: var(--gp-muted);
+  font-size: 12px;
+}
+
+.sectionError {
+  margin: 10px 0 0;
+}
+
+.undoNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-start: 12px;
+  padding-block-start: 12px;
+  border-block-start: 1px solid var(--gp-line);
+  color: var(--gp-secondary);
+  font-size: 12px;
+}
+
+.undoNotice span {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.undoNotice strong {
+  color: var(--gp-ink);
+  font-weight: 600;
+}
+
+@container document-composer (min-width: 45rem) {
+  .composerHeader,
+  .section {
+    padding: 20px;
+  }
+
+  .headerFields,
+  .supplierFields {
+    grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.55fr);
+  }
+
+  .fullWidthField {
+    grid-column: 1 / -1;
+  }
+
+  .conditionsFields {
+    grid-template-columns: minmax(0, 1.6fr) minmax(12rem, 0.6fr);
+    align-items: start;
+  }
+
+  .field :global([data-slot="input"]) {
+    min-block-size: 40px;
+  }
+
+  .materialsTable,
+  .tableBody {
+    gap: 0;
+  }
+
+  .tableHeader,
+  .materialRow {
+    display: grid;
+    grid-template-columns:
+      minmax(11rem, 1.8fr)
+      minmax(5.25rem, 0.55fr)
+      minmax(4.75rem, 0.5fr)
+      minmax(7.5rem, 0.75fr)
+      minmax(7rem, 0.7fr)
+      5.5rem;
+    gap: 8px;
+  }
+
+  .tableHeader {
+    align-items: end;
+    padding: 0 8px 8px;
+    color: var(--gp-muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .actionsHeader {
+    text-align: center;
+  }
+
+  .materialRow {
+    align-items: start;
+    padding: 10px 8px;
+  }
+
+  .descriptionCell,
+  .amountCell,
+  .actionsCell {
+    grid-column: auto;
+  }
+
+  .rowField > label,
+  .mobileCellLabel,
+  .actionText {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .rowField {
+    gap: 5px;
+  }
+
+  .amountCell {
+    min-block-size: 40px;
+    justify-content: flex-start;
+    padding-inline: 4px;
+  }
+
+  .actionsCell {
+    min-block-size: 40px;
+    justify-content: center;
+  }
+
+  .rowActions {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .rowAction {
+    inline-size: 40px;
+    min-inline-size: 40px;
+    block-size: 40px;
+    min-block-size: 40px;
+    padding: 0;
+  }
+}
+
+@container document-composer (max-width: 31rem) {
+  .composerHeader,
+  .itemsHeading,
+  .undoNotice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .composerHeader > small {
+    align-self: flex-start;
+  }
+
+  .addButton,
+  .undoButton {
+    inline-size: 100%;
+  }
+
+  .materialRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .descriptionCell,
+  .amountCell,
+  .actionsCell {
+    grid-column: 1;
+  }
+
+  .rowActions {
+    inline-size: 100%;
+  }
+
+  .rowAction {
+    flex: 1 1 0;
+  }
+}

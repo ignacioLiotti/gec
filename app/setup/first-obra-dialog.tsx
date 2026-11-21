@@ -169,8 +169,9 @@ export function FirstObraDialog({
 							<Input id="first-obra-client" value={client} onChange={(event) => setClient(event.target.value)} placeholder="Ej.: Ministerio de Obras Públicas" required />
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="first-obra-basic-month">Mes básico *</Label>
-							<Input id="first-obra-basic-month" type="month" value={basicMonth} onChange={(event) => setBasicMonth(event.target.value)} required />
+							<Label htmlFor="first-obra-basic-month">Mes básico del contrato *</Label>
+							<Input id="first-obra-basic-month" type="month" value={basicMonth} onChange={(event) => setBasicMonth(event.target.value)} aria-describedby="first-obra-basic-month-hint" required />
+							<p id="first-obra-basic-month-hint" className="text-xs text-content-muted">Usá el mes y el año indicados como mes básico en el contrato.</p>
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="first-obra-start">Fecha de inicio *</Label>

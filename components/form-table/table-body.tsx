@@ -295,7 +295,7 @@ function TableRowInner<Row extends FormTableRow>({
 							size="sm"
 							aria-expanded={isExpanded}
 							onClick={() => onToggleAccordion(rowData.id)}
-							className="h-7 gap-1 text-content-muted hover:text-content"
+							className="h-7 gap-1"
 						>
 							{isExpanded ? (
 								<>
@@ -341,17 +341,7 @@ function TableRowInner<Row extends FormTableRow>({
 						setHoveredCell(null);
 					}
 				}}
-				className={cn(
-					"group relative border-b border-stroke-soft",
-					rowSurfaceClassName,
-					isRowDirty
-						? "group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-[100]"
-						: "",
-					colorInfo && TONE_CELL_CLASSES[colorInfo.tone],
-					resolvedRowElementClassName,
-					shouldExpandActiveTextRow && " align-top",
-					" has-[textarea:focus]:align-top",
-				)}
+				className={cn("group relative border-b border-stroke-soft", rowSurfaceClassName, isRowDirty ? ("group/row-dirty shadow-[inset_0_0_0_2px_rgba(217,119,6,0.85)] border border-amber-500 z-[100]") : (""), colorInfo && TONE_CELL_CLASSES[colorInfo.tone], resolvedRowElementClassName, shouldExpandActiveTextRow && "align-top", "has-[textarea:focus]:align-top")}
 			>
 				{showRowNumbers && (
 					<td
@@ -550,7 +540,7 @@ function TableRowInner<Row extends FormTableRow>({
 										size="sm"
 										aria-expanded={isExpanded}
 										onClick={() => onToggleAccordion(rowData.id)}
-										className="h-7 gap-1 text-content-muted hover:text-content"
+										className="h-7 gap-1"
 									>
 										{isExpanded ? (
 											<>

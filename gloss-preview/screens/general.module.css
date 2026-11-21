@@ -1,0 +1,420 @@
+.screen {
+  container: general-preview / inline-size;
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  color: var(--gp-ink);
+}
+
+.modeBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block: 8px;
+  border-block: 1px solid var(--gp-line);
+}
+
+.modeButton {
+  min-height: 40px;
+}
+
+.modeContent,
+.content,
+.editForm,
+.stackGrid {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.progressGrid,
+.splitGrid {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.fillPanel {
+  height: 100%;
+  min-width: 0;
+}
+
+.progressSummary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.progressSummary strong {
+  font-size: clamp(2rem, 12cqi, 3.25rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.progressSummary span,
+.mutedCopy,
+.periodNote {
+  color: var(--gp-muted);
+}
+
+.progressTrack,
+.timeTrack {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gp-sunk);
+}
+
+.progressTrack span,
+.timeTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gp-accent);
+  transition: width 180ms var(--gp-ease);
+}
+
+.alerts {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gp-line);
+}
+
+.sectionLabel,
+.metric dt,
+.customField dt,
+.memoryItem span,
+.memoryDetail > span {
+  color: var(--gp-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.alertRow,
+.formAlert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--gp-accent);
+}
+
+.alertRow svg,
+.formAlert svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.alertRow p,
+.mutedCopy,
+.formAlert,
+.periodNote {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.tableRegion {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--gp-line);
+  border-radius: 12px;
+}
+
+.tableRegion:focus-visible {
+  outline: 2px solid var(--gp-accent);
+  outline-offset: 2px;
+}
+
+.tableRegion > :global([data-slot="table-container"]) {
+  overflow: visible;
+}
+
+.table {
+  min-width: 760px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  height: 48px;
+  padding-inline: 12px;
+  border-color: var(--gp-line);
+}
+
+.table th {
+  color: var(--gp-secondary);
+  background: var(--gp-sunk);
+}
+
+.primaryCell {
+  color: var(--gp-ink);
+  font-weight: 650;
+}
+
+.numeric {
+  text-align: right;
+}
+
+.financeGrid,
+.periodGrid,
+.derivedSummary {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+
+.metric {
+  min-width: 0;
+}
+
+.metric dt,
+.metric dd,
+.fact dt,
+.fact dd,
+.customField dt,
+.customField dd {
+  margin: 0;
+}
+
+.metric dd {
+  margin-top: 6px;
+  color: var(--gp-ink);
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.periodBlock {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--gp-line);
+}
+
+.periodNote {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.infoGrid,
+.customGrid {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--gp-line);
+}
+
+.fact,
+.customField {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--gp-line);
+}
+
+.factLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--gp-muted);
+  font-size: 0.8125rem;
+}
+
+.factLabel svg {
+  width: 16px;
+  height: 16px;
+  color: var(--gp-accent);
+}
+
+.factValue,
+.customField dd {
+  overflow-wrap: anywhere;
+  color: var(--gp-ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.formGrid {
+  display: grid;
+  gap: 18px 16px;
+}
+
+.field {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.control {
+  min-height: 40px;
+}
+
+.fieldError {
+  margin: 0;
+  color: var(--gp-accent);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.derivedSummary {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--gp-line);
+}
+
+.formAlert {
+  padding: 12px 16px;
+  border: 1px solid var(--gp-strong);
+  border-radius: 12px;
+  background: var(--gp-panel);
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gp-line);
+}
+
+.memoryGrid {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.memoryList {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.memoryItem {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  height: auto;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid var(--gp-line);
+  border-radius: 10px;
+  background: var(--gp-panel);
+  color: var(--gp-ink);
+  font: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: pointer;
+  transition-property: border-color, background-color;
+  transition-duration: 140ms;
+  transition-timing-function: var(--gp-ease);
+}
+
+.memoryItem:hover,
+.memoryItem[data-selected="true"] {
+  border-color: var(--gp-strong);
+  background: var(--gp-sunk);
+}
+
+.memoryItem:focus-visible {
+  outline: 2px solid var(--gp-accent);
+  outline-offset: 2px;
+}
+
+.memoryItem strong {
+  font-size: 0.9375rem;
+}
+
+.memoryItem small {
+  color: var(--gp-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.memoryDetail {
+  align-self: start;
+  min-height: 180px;
+  padding: 18px;
+  border-left: 2px solid var(--gp-accent);
+  background: var(--gp-sunk);
+}
+
+.memoryDetail > svg {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 18px;
+  color: var(--gp-accent);
+}
+
+.memoryDetail h3 {
+  margin: 8px 0 10px;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.memoryDetail p {
+  margin: 0;
+  color: var(--gp-secondary);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+@container general-preview (width >= 42rem) {
+  .financeGrid,
+  .periodGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .infoGrid,
+  .customGrid,
+  .formGrid,
+  .derivedSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .infoGrid,
+  .customGrid {
+    column-gap: 24px;
+  }
+}
+
+@container general-preview (width >= 58rem) {
+  .progressGrid {
+    grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr);
+  }
+
+  .splitGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memoryGrid {
+    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .customGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressTrack span,
+  .timeTrack span,
+  .memoryItem {
+    transition: none;
+  }
+}

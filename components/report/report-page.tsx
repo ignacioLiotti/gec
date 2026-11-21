@@ -47,6 +47,10 @@ type ReportPageProps<Row, Filters> = {
 	initialCompareEnabled?: boolean;
 	backUrl?: string;
 	readOnly?: boolean;
+	compactControls?: boolean;
+	/** Height reserved by the host application's navigation. */
+	viewportOffset?: string;
+	onExport?: (format: "csv" | "xlsx", rows: Row[]) => void;
 };
 
 type SavedReportPreset<Filters> = {
@@ -249,6 +253,9 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 	initialCompareEnabled,
 	backUrl,
 	readOnly = false,
+	compactControls = false,
+	viewportOffset = "4rem",
+	onExport,
 }: ReportPageProps<Row, Filters>) {
 	const router = useRouter();
   const { back, push } = router;
@@ -470,7 +477,8 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 			viewMode: reportState.viewMode,
 			filters,
 		});
-	}, [config.columns, config.title, data, filters, reportState.companyName, reportState.date, reportState.description, reportState.hiddenColumnIds, reportState.viewMode]);
+		onExport?.("csv", data);
+	}, [config.columns, config.title, data, filters, onExport, reportState.companyName, reportState.date, reportState.description, reportState.hiddenColumnIds, reportState.viewMode]);
 
 	const handleExportXlsx = useCallback(async () => {
 		try {
@@ -486,13 +494,14 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 				viewMode: reportState.viewMode,
 				filters,
 			});
+			onExport?.("xlsx", data);
 		} catch (err) {
 			console.error(err);
 			toast.error("No se pudo exportar a Excel");
 		} finally {
 			setIsExportingXlsx(false);
 		}
-	}, [config.columns, config.title, data, filters, reportState.companyName, reportState.date, reportState.description, reportState.hiddenColumnIds, reportState.viewMode]);
+	}, [config.columns, config.title, data, filters, onExport, reportState.companyName, reportState.date, reportState.description, reportState.hiddenColumnIds, reportState.viewMode]);
 
 	const handleSavePreset = useCallback(async () => {
 		const name = presetName.trim();
@@ -1017,7 +1026,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 
 	return (
 		<Fragment>
-			<div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-[#d7dce2]">
+			<div className="flex w-full overflow-hidden bg-[#d7dce2]" style={{ height: `calc(100vh - ${viewportOffset})` }}>
 				{/* Main Content - Report Preview */}
 				<div className="relative flex min-w-0 flex-1 flex-col bg-[#f3f4f5] dark:bg-zinc-900">
 					{/* Toolbar */}
@@ -1202,7 +1211,27 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									<div className="text-[10px] uppercase tracking-[0.12em] text-[#a8a29e]">filtros</div>
 								</div>
 							</div>
-							<div className="mt-3 grid grid-cols-4 gap-1.5">
+							{compactControls ? (
+								<nav className="mt-3 flex flex-wrap gap-1" aria-label="Configurar reporte">
+									{([
+										["settings", "Documento"],
+										["filters", "Filtros"],
+										["columns", "Columnas"],
+										["visual", "Estilo"],
+										["presets", "Presets"],
+									] as const).map(([panel, label]) => (
+										<Button
+											key={panel}
+											size="sm"
+											variant={activePanel === panel ? "secondary" : "ghost"}
+											aria-pressed={activePanel === panel}
+											onClick={() => setActivePanel(panel)}
+										>
+											{label}
+										</Button>
+									))}
+								</nav>
+							) : <div className="mt-3 grid grid-cols-4 gap-1.5">
 								<button
 									type="button"
 									className={`flex h-7 items-center justify-center gap-1 rounded-md border text-[11px] transition active:scale-[0.97] ${
@@ -1253,14 +1282,14 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 									<Sparkles className="size-3.5" />
 									Estilo
 								</button>
-							</div>
+							</div>}
 						</div>
 
 						{/* SETTINGS TAB */}
 						<TabsContent value="settings" className="flex-1 p-0 m-0 overflow-hidden">
 							<ScrollArea className="h-full">
 								<div className="space-y-4 p-4">
-									<div className="grid grid-cols-2 gap-2">
+									{!compactControls && <div className="grid grid-cols-2 gap-2">
 										<button
 											type="button"
 											data-wizard-target="report-filters-panel"
@@ -1323,7 +1352,7 @@ export function ReportPage<Row, Filters extends Record<string, unknown>>({
 											<p className="mt-2 text-xs font-semibold text-[#1f2937]">Presets</p>
 											<p className="mt-0.5 text-[11px] text-[#64748b]">Guardar o aplicar</p>
 										</button>
-									</div>
+									</div>}
 
 									<section className={sectionClassName}>
 										<div className="mb-3 flex items-center justify-between gap-2">

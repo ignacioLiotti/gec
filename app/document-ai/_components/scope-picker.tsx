@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "@/components/ui/input";
+
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -172,11 +174,11 @@ export function ScopePicker({
 				<div className="border-b border-stone-100 p-2">
 					<div className="relative">
 						<Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-stone-400" />
-						<input
+						<Input
 							value={search}
 							onChange={(event) => setSearch(event.target.value)}
 							placeholder="Buscar obra"
-							className="h-8 w-full rounded-md border border-stone-200 bg-white pl-8 pr-2 text-xs outline-none transition-colors focus:border-stone-400"
+							className="h-8 w-full pl-8 pr-2 text-xs transition-colors"
 						/>
 					</div>
 				</div>

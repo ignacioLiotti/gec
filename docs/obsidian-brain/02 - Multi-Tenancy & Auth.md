@@ -28,6 +28,10 @@ The app is a **multi-tenant SaaS** where each organization is a "tenant." Users 
 ```
 
 ### Key Files
+- `app/auth/sign-up/page.tsx`, `app/auth/sign-in/page.tsx` — public account entry pages linked from the landing with real URLs, so entry remains available before landing hydration and after browser Back/Forward.
+- `components/auth/auth-entry.tsx` — page presentation of the shared email/Google form; existing protected-route authentication still uses the modal controller.
+- `/privacy` — public policy, available without a session or tenant; it must not force the authentication modal or app sidebar.
+- `app/tenants/actions.ts` — atomic organization creation, then active-tenant cookie and direct setup redirect. This refreshes the layout with the new membership.
 - `utils/supabase/server.ts` — `createClient()` for server components/routes
 - `utils/supabase/client.ts` — `createClient()` for browser
 - `utils/supabase/admin.ts` — `createAdminClient()` with service role (bypasses RLS)

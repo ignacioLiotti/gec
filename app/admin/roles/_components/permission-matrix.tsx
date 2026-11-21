@@ -1,4 +1,5 @@
 "use client";
+import { PermissionStateControl } from "./permission-state-control";
 
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -278,21 +279,7 @@ function matchesPermission(permission: Permission, query: string) {
   return haystack.includes(query);
 }
 
-function stateButtonClass(
-  currentState: PermissionAssignmentState,
-  option: PermissionAssignmentState,
-) {
-  if (currentState !== option) {
-    return "bg-background text-muted-foreground hover:bg-muted";
-  }
-  if (option === "grant") {
-    return "bg-emerald-600 text-white hover:bg-emerald-600";
-  }
-  if (option === "deny") {
-    return "bg-red-600 text-white hover:bg-red-600";
-  }
-  return "bg-foreground text-background hover:bg-foreground";
-}
+
 
 export function PermissionMatrix({
   permissionsByCategory,
@@ -592,32 +579,7 @@ export function PermissionMatrix({
                         </p>
                       )}
                     </div>
-                    <div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-md border text-xs xl:w-[270px]">
-                      {(["inherit", "grant", "deny"] as const).map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => setPermissionState(permission.key, option)}
-                          disabled={disabled}
-                          className={`flex min-h-9 items-center justify-center gap-1 px-2 font-medium transition disabled:opacity-60 ${stateButtonClass(state, option)}`}
-                        >
-                          {option === "inherit" ? (
-                            <RotateCcw className="size-3" />
-                          ) : option === "grant" ? (
-                            <Check className="size-3" />
-                          ) : (
-                            <Ban className="size-3" />
-                          )}
-                          <span>
-                            {option === "inherit"
-                              ? "Heredar"
-                              : option === "grant"
-                                ? "Permitir"
-                                : "Bloquear"}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <PermissionStateControl value={state} onChange={(option) => setPermissionState(permission.key, option)} disabled={disabled} label={permission.key} className="xl:w-[270px]" />
                   </div>
                 </div>
               );
@@ -667,8 +629,8 @@ export function PermissionSummary({
         return (
           <Badge
             key={category.category}
-            variant={deniedCount > 0 ? "outline" : "secondary"}
-            className={deniedCount > 0 ? "border-red-200 text-red-700" : "text-xs"}
+            variant={(deniedCount > 0) ? ("destructive") : (deniedCount > 0 ? "outline" : "secondary")}
+            className={deniedCount > 0 ? ("") : ("text-xs")}
           >
             {CATEGORY_ICONS[category.category]}
             <span className="ml-1">

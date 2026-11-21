@@ -164,10 +164,10 @@ function CellSuggestionPrompt<Row extends FormTableRow>({
 			<PopoverTrigger asChild>
 				<Button
 					type="button"
-					variant="outline"
+					variant={"defaultSecondary"}
 					size="sm"
 					className={cn(
-						"pointer-events-all absolute right-9 z-20 inline-flex h-6 items-center rounded-full border border-orange-200 bg-orange-50 px-1 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm",
+						"pointer-events-all absolute right-9 z-20 inline-flex h-6 items-center px-1 text-[10px] font-semibold uppercase tracking-wide",
 						className
 					)}
 				>
@@ -349,10 +349,10 @@ function DateCellEditor<Row extends FormTableRow>({
 				<PopoverTrigger asChild>
 					<LightButton
 						type="button"
-						variant="default"
+						variant={"primary"}
 						size="icon-sm"
 						aria-label="Abrir calendario"
-						className="shrink-0 bg-white text-content [--btn-shadow:var(--shadow-light-button)] hover:bg-accent-soft hover:text-orange-primary hover:[--btn-ring:hsl(var(--orange-primary)_/_0.32)] focus-visible:bg-accent-soft focus-visible:text-orange-primary focus-visible:ring-2 focus-visible:ring-orange-primary/35 focus-visible:ring-offset-0"
+						className="shrink-0"
 					>
 						<CalendarDays className="size-4 shrink-0" />
 					</LightButton>
@@ -898,10 +898,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 					: config.iconName;
 			return (
 				<div
-					className={cn(
-						"inline-flex items-center gap-2",
-						config.iconPosition === "right" ? "flex-row-reverse" : ""
-					)}
+					className={cn("inline-flex items-center gap-2", config.iconPosition === "right" ? ("flex-row-reverse") : (""))}
 				>
 					{iconName && (
 						<span className={cn("text-muted-foreground", config.iconClassName)}>
@@ -1142,9 +1139,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 							}}
 						>
 							<SelectTrigger
-								className={cn(
-									"h-auto min-h-0 w-auto max-w-full justify-start border-0 bg-transparent p-0 text-left shadow-none outline-none hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg]:hidden"
-								)}
+								className={"h-auto min-h-0 w-auto max-w-full justify-start border-0 bg-transparent p-0 text-left shadow-none outline-none hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg]:hidden"}
 							>
 								<span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
 									{matched ? (
@@ -1196,7 +1191,7 @@ export function renderEditableContent<Row extends FormTableRow>({
 							</SelectContent>
 						</Select>
 						{closest ? (
-							<Badge variant="outline" className="whitespace-nowrap border-orange-200 bg-orange-50 text-orange-700">
+							<Badge variant={"default"} className="whitespace-nowrap">
 								Sugerencia: {closest.option.text}
 							</Badge>
 						) : null}

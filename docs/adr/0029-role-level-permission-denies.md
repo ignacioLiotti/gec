@@ -37,9 +37,17 @@ The role editor now presents each supported permission as `Heredar`, `Permitir`,
 - Existing role permission rows remain grants because `is_granted` defaults to true.
 - The database RPC, route guard helpers, sidebar deny list, and admin role editor must stay aligned on the same precedence order.
 
+## Migration history
+
+Migration `0123` originally defined `has_permission` with the role-deny precedence above, but it referenced `user_permission_overrides.tenant_id` before migration `0125` added that column. A fresh database therefore stopped at `0123`. The approved 2026-10-17 historical exception adds the nullable column prerequisite to `0123` so a fresh migration run can continue to `0125`, which remains unchanged and completes the tenant-scoping migration.
+
+Migration `0125` then replaced `has_permission` without the role-deny branch. Migration `0132` restores the complete function as the final database definition, including per-user deny, per-user grant, role deny, and role grant precedence. The additive migration repairs databases that already passed `0125`; changing `0123` alone would only repair fresh migration runs. See the [migration repair record](../../plans/2026-10-17-isolated-integration/migration-repair.md) for the failure evidence and approved scope.
+
 ## Related files
 
 - `supabase/migrations/0123_role_permission_denies.sql`
+- `supabase/migrations/0125_tenant_scoped_permission_denies.sql`
+- `supabase/migrations/0132_restore_role_permission_denies.sql`
 - `lib/route-guard.ts`
 - `lib/route-access.ts`
 - `app/admin/roles/permissions-actions.ts`

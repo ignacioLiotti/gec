@@ -32,6 +32,10 @@ Recurring sends are executed by `/api/whatsapp/recurring/dispatch`, protected by
 
 Add `whatsapp_flows` and `whatsapp_flow_runs` for tenant-scoped, Sintesis-hosted flow testing. Active flows can be exposed through a WhatsApp interactive list when an authorized contact sends a greeting/menu message. The selected flow creates a run and returns a signed Sintesis URL for the editable form. The local `meta_flow_id` field is reserved for future native Meta Flow publication/sync; the current implementation does not make Sintesis the source of truth for Meta-hosted Flow JSON.
 
+Signed response pages and their confirmation pages bypass the browser's tenant-login prompt. The server page and action still validate the run-bound HMAC. A Sintesis-hosted flow accepts responses only while its persisted run is `sent` and `expires_at` is in the future. The action checks again when a previously opened form is submitted. Expired, cancelled, completed, or otherwise closed runs show a specific denial without inserting a submission.
+
+For signed flow submissions, the run UUID is also the submission primary key. A concurrent insert keeps the existing row rather than updating its answer. Before linking a conflict result, the action verifies its tenant, contact, and `raw_values._capture` run provenance. Run and audit values come from that stored winner. This avoids duplicate answers without a schema change, but does not make the three SQL writes one transaction or cover the separate native Meta response path.
+
 ## Consequences
 
 - Admins can tune WhatsApp limits without changing the tenant's full subscription plan.

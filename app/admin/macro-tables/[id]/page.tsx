@@ -1189,7 +1189,7 @@ export default function EditMacroTablePage() {
           <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700"
+            className="gap-2"
           >
             {isSaving ? (
               <Loader2 className="size-4 animate-spin" />
@@ -1219,7 +1219,7 @@ export default function EditMacroTablePage() {
 
         <TabsContent value="info">
           <div className="space-y-6">
-            <Card className="border-cyan-500/20">
+            <Card >
               <CardHeader>
                 <CardTitle className="text-lg">Información básica</CardTitle>
                 <CardDescription>
@@ -1250,7 +1250,7 @@ export default function EditMacroTablePage() {
               </CardContent>
             </Card>
 
-            <Card className="border-purple-500/20">
+            <Card >
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <PanelLeft className="size-5 text-purple-500" />
@@ -1304,7 +1304,7 @@ export default function EditMacroTablePage() {
                     onClick={handleSaveSidebar}
                     disabled={isSavingSidebar}
                     size="sm"
-                    className="gap-2 bg-purple-600 hover:bg-purple-700"
+                    className="gap-2"
                   >
                     {isSavingSidebar ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -1320,7 +1320,7 @@ export default function EditMacroTablePage() {
         </TabsContent>
 
         <TabsContent value="sources">
-          <Card className="border-cyan-500/20">
+          <Card >
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1357,14 +1357,10 @@ export default function EditMacroTablePage() {
                       return (
                         <Button
                           key={template.id}
-                          variant={isSelected ? "default" : "outline"}
+                          variant={(!isSelected) ? ("default") : ((isSelected) ? ("default") : (isSelected ? "default" : "outline"))}
                           size="sm"
                           onClick={() => selectByTemplate(isSelected ? null : template.id)}
-                          className={cn(
-                            "gap-2",
-                            isSelected && "bg-amber-500 hover:bg-amber-600",
-                            !isSelected && "border-amber-500/30 hover:bg-amber-500/10"
-                          )}
+                          className={"gap-2"}
                           disabled={matchCount === 0}
                         >
                           <FileStack className="size-3.5" />
@@ -1495,7 +1491,7 @@ export default function EditMacroTablePage() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                            className="h-7 px-2 text-xs"
                             onClick={(event) => {
                               event.stopPropagation();
                               clearTablesInObra(obra.id);
@@ -1558,7 +1554,7 @@ export default function EditMacroTablePage() {
         </TabsContent>
 
         <TabsContent value="columns">
-          <Card className="border-cyan-500/20">
+          <Card >
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -1792,9 +1788,8 @@ export default function EditMacroTablePage() {
                                 <ArrowDown className="size-4" />
                               </Button>
                               <Button
-                                variant="ghost"
+                                variant={"destructiveSecondary"}
                                 size="icon"
-                                className="text-destructive hover:bg-destructive/10"
                                 onClick={() => removeColumn(selectedColumn.id)}
                                 aria-label="Eliminar columna seleccionada"
                               >

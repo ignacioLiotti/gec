@@ -38,9 +38,9 @@ export default async function NewTenantPage({ searchParams }: NewTenantPageProps
 					<p className="mt-6 text-sm font-semibold uppercase tracking-[0.14em] text-orange-primary">
 						Nuevo espacio de trabajo
 					</p>
-					<h1 className="mt-2 text-3xl font-semibold tracking-tight text-content">
-						Creá tu organización
-					</h1>
+					<h2 className="mt-2 text-3xl font-semibold tracking-tight text-content">
+						Configuración incluida
+					</h2>
 					<p className="mt-3 text-sm leading-6 text-content-secondary">
 						Vas a ser el propietario. La configuración recomendada deja la parte técnica resuelta y después te guía para cargar la primera obra.
 					</p>
@@ -61,6 +61,7 @@ export default async function NewTenantPage({ searchParams }: NewTenantPageProps
 				</section>
 
 				<section className="order-1 p-6 lg:order-2 lg:p-8">
+					<h1 className="mb-4 text-3xl font-semibold tracking-tight text-content">Creá tu organización</h1>
 					<div className="flex items-center gap-2 text-sm font-medium text-success">
 						<Check className="size-4" />
 						Modelo recomendado seleccionado

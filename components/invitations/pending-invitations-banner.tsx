@@ -92,14 +92,14 @@ export function PendingInvitationsBanner() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 text-blue-700 hover:text-blue-900 hover:bg-blue-100"
+              className="h-8"
               onClick={() => push(`/invitations/${invitation.token}`)}
             >
               View Details
             </Button>
             <Button
               size="sm"
-              className="h-8 bg-blue-600 hover:bg-blue-700"
+              className="h-8"
               onClick={() => handleAccept(invitation)}
               disabled={acceptingId === invitation.id}
             >
@@ -118,7 +118,7 @@ export function PendingInvitationsBanner() {
             <Button
               size="sm"
               variant="ghost"
-              className="size-8 p-0 text-blue-600 hover:text-blue-800 hover:bg-blue-100"
+              className="size-8 p-0"
               onClick={() => handleDismiss(invitation.id)}
             >
               <X className="size-4" />

@@ -441,11 +441,7 @@ export function ObrasTable(props: ObrasTableProps) {
                 <React.Fragment key={index}>
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
-                      <tr className={cn(
-                        "transition-colors duration-150 hover:bg-muted/50",
-                        visualIndex % 2 === 0 ? "bg-background" : "bg-card/40",
-                        index === lastIndex ? "border-b" : ""
-                      )}>
+                      <tr className={cn("transition-colors duration-150 hover:bg-muted/50", visualIndex % 2 === 0 ? ("bg-background") : ("bg-card/40"), index === lastIndex ? ("border-b") : (""))}>
                         <formApi.Field name={`detalleObras[${index}].n`}>
                           {(subField: any) => (
                             <td {...getStickyProps(0, "px-2 pl-4 py-2  outline outline-border border-border relative bg-background")}>
@@ -487,7 +483,7 @@ export function ObrasTable(props: ObrasTableProps) {
                                     </div>
                                   ) : (
                                     <div className="min-h-[18px]">
-                                      <Input type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="w-full text-sm border" />
+                                      <Input type="text" value={subField.state.value ?? ""} onChange={(event) => subField.handleChange(event.target.value)} onBlur={subField.handleBlur} className="w-full text-sm" />
                                     </div>
                                   )}
                                 </ContextMenuTrigger>

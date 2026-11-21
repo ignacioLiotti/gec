@@ -111,31 +111,23 @@ export const DocumentSheet = memo(function DocumentSheet({
 				<div className="pointer-events-none fixed inset-y-0 left-1 right-1 z-[55] flex items-center justify-around sm:left-2 sm:right-2">
 					<Button
 						type="button"
-						variant="outline"
+						variant={"secondary"}
 						size="icon-lg"
 						onClick={onPreviousDocument ?? undefined}
 						disabled={!onPreviousDocument || arePaginationButtonsDisabled}
 						aria-label="Documento anterior"
-						className={cn(
-							"pointer-events-auto h-10 w-10 rounded-full border-stone-200/80 bg-white/92 text-stone-700 shadow-[0_20px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] sm:h-12 sm:w-12",
-							"disabled:border-stone-200/70 disabled:bg-white/55 disabled:text-stone-300 disabled:shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-							arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed"
-						)}
+						className={cn("pointer-events-auto h-10 w-10 backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 active:scale-[0.97] sm:h-12 sm:w-12", arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed")}
 					>
 						<ChevronLeft className="size-5" />
 					</Button>
 					<Button
 						type="button"
-						variant="outline"
+						variant={"secondary"}
 						size="icon-lg"
 						onClick={onNextDocument ?? undefined}
 						disabled={!onNextDocument || arePaginationButtonsDisabled}
 						aria-label="Documento siguiente"
-						className={cn(
-							"pointer-events-auto h-10 w-10 rounded-full border-stone-200/80 bg-white/92 text-stone-700 shadow-[0_20px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 hover:bg-white active:scale-[0.97] sm:h-12 sm:w-12",
-							"disabled:border-stone-200/70 disabled:bg-white/55 disabled:text-stone-300 disabled:shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-							arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed"
-						)}
+						className={cn("pointer-events-auto h-10 w-10 backdrop-blur-xl transition-transform duration-200 hover:-translate-y-0.5 active:scale-[0.97] sm:h-12 sm:w-12", arePaginationButtonsDisabled && "opacity-0 cursor-not-allowed")}
 					>
 						<ChevronRight className="size-5" />
 					</Button>
@@ -150,10 +142,7 @@ export const DocumentSheet = memo(function DocumentSheet({
 				onPointerDownOutside={(event) => {
 					event.preventDefault();
 				}}
-				className={cn(
-					"mx-auto flex h-[100dvh] sm:h-[95vh] w-full max-w-[100vw] sm:max-w-[700px] 2xl:max-w-[800px] flex-col gap-0 p-0 z-50 mb-0 sm:mb-6 transition-transform duration-300",
-					isDataSheetOpen ? "2xl:-translate-x-[22rem] xl:-translate-x-[18rem]" : ""
-				)}
+				className={cn("mx-auto flex h-[100dvh] sm:h-[95vh] w-full max-w-[100vw] sm:max-w-[700px] 2xl:max-w-[800px] flex-col gap-0 p-0 z-50 mb-0 sm:mb-6 transition-transform duration-300", isDataSheetOpen ? ("2xl:-translate-x-[22rem] xl:-translate-x-[18rem]") : (""))}
 			>
 				<SheetHeader className="border-b bg-white px-3 sm:px-6 py-3 sm:py-4">
 					<div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">

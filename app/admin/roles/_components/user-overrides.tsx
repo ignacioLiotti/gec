@@ -1,4 +1,7 @@
 "use client";
+import { PermissionStateControl } from "./permission-state-control";
+import { Button } from "@/components/ui/button";
+
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -83,36 +86,35 @@ export default function UserOverrides({ userId, allPermissions }: { userId: stri
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button variant={"destructiveSecondary"}
           type="button"
           onClick={() => setAll(false)}
           disabled={Boolean(saving)}
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+          className="px-3 py-1.5 text-xs font-medium disabled:opacity-60"
         >
           Bloquear todos
-        </button>
-        <button
+        </Button>
+        <Button variant={"successSecondary"}
           type="button"
           onClick={() => setAll(true)}
           disabled={Boolean(saving)}
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+          className="px-3 py-1.5 text-xs font-medium disabled:opacity-60"
         >
           Permitir todos
-        </button>
-        <button
+        </Button>
+        <Button variant="outline"
           type="button"
           onClick={clearAll}
           disabled={Boolean(saving)}
-          className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-foreground/5 disabled:opacity-60"
+          className="px-3 py-1.5 text-xs font-medium disabled:opacity-60"
         >
           Heredar todos
-        </button>
+        </Button>
         {loading && <span className="text-xs text-foreground/60">Cargando...</span>}
       </div>
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         {sortedPermissions.map((permission) => {
           const state = getState(permission.id);
-          const isSaving = saving === permission.id;
           return (
             <div key={permission.id} className="rounded-md border p-3 text-sm">
               <div className="flex min-w-0 items-start justify-between gap-3">
@@ -124,28 +126,7 @@ export default function UserOverrides({ userId, allPermissions }: { userId: stri
                     </div>
                   ) : null}
                 </div>
-                <div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-md border text-xs">
-                  {(["inherit", "grant", "deny"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setOverride(permission.id, option)}
-                      disabled={isSaving || Boolean(saving && !isSaving)}
-                      className={
-                        "px-2 py-1 font-medium transition disabled:opacity-60 " +
-                        (state === option
-                          ? option === "grant"
-                            ? "bg-emerald-600 text-white"
-                            : option === "deny"
-                              ? "bg-red-600 text-white"
-                              : "bg-foreground text-background"
-                          : "bg-background hover:bg-foreground/5")
-                      }
-                    >
-                      {option === "inherit" ? "Heredar" : option === "grant" ? "Permitir" : "Bloquear"}
-                    </button>
-                  ))}
-                </div>
+                <PermissionStateControl value={state} onChange={(option) => setOverride(permission.id, option)} disabled={Boolean(saving)} label={permission.key} />
               </div>
             </div>
           );

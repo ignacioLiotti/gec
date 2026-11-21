@@ -1,103 +1,126 @@
-import { createClient } from "@supabase/supabase-js";
+import type { BrowserContextOptions } from "@playwright/test";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import {
+	createClient,
+	type Session,
+	type SupabaseClient,
+} from "@supabase/supabase-js";
 
-const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
-const DEFAULT_TENANT_NAME = "Default Tenant";
+import type { LocalE2ETarget } from "./local-target";
 
-function getAdminClient() {
-	const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+type SerializedCookie = {
+	name: string;
+	value: string;
+	options: CookieOptions;
+};
 
-	if (!url || !serviceRoleKey) {
-		throw new Error(
-			"Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for E2E auth bootstrap.",
-		);
-	}
+type StorageState = NonNullable<
+	Exclude<BrowserContextOptions["storageState"], string>
+>;
 
-	return createClient(url, serviceRoleKey, {
-		auth: {
-			autoRefreshToken: false,
-			persistSession: false,
-		},
-	});
+export type AuthenticatedSession = {
+	db: SupabaseClient;
+	storageState: StorageState;
+};
+
+function appCookie(
+	target: LocalE2ETarget,
+	cookie: SerializedCookie,
+): StorageState["cookies"][number] {
+	return {
+		name: cookie.name,
+		value: cookie.value,
+		domain: target.appUrl.hostname,
+		path: cookie.options.path ?? "/",
+		expires: -1,
+		httpOnly: cookie.options.httpOnly ?? false,
+		secure: target.appUrl.protocol === "https:",
+		sameSite: "Lax",
+	};
 }
 
-export async function ensureE2EUser(params: {
+async function serializeSsrSession(
+	target: LocalE2ETarget,
+	session: Session,
+): Promise<SerializedCookie[]> {
+	let cookies: SerializedCookie[] = [];
+	const serverClient = createServerClient(
+		target.supabaseUrl.href,
+		target.supabaseAnonKey,
+		{
+			auth: {
+				autoRefreshToken: false,
+				detectSessionInUrl: false,
+				persistSession: true,
+			},
+			cookies: {
+				getAll: () => cookies,
+				setAll: (nextCookies) => {
+					cookies = nextCookies;
+				},
+			},
+		},
+	);
+
+	const { error } = await serverClient.auth.setSession({
+		access_token: session.access_token,
+		refresh_token: session.refresh_token,
+	});
+	if (error) {
+		throw new Error(`Failed to serialize the E2E actor session: ${error.message}`);
+	}
+	if (cookies.length === 0) {
+		throw new Error("Supabase did not emit SSR cookies for the E2E actor session.");
+	}
+
+	return cookies;
+}
+
+export async function signInSyntheticActor(params: {
+	target: LocalE2ETarget;
 	email: string;
 	password: string;
-}) {
-	const admin = getAdminClient();
-
-	const { data: tenantData, error: tenantError } = await admin
-		.from("tenants")
-		.upsert(
-			{
-				id: DEFAULT_TENANT_ID,
-				name: DEFAULT_TENANT_NAME,
-			},
-			{ onConflict: "id" },
-		)
-		.select("id")
-		.single();
-
-	if (tenantError || !tenantData) {
-		throw new Error(
-			`Failed to ensure default tenant for E2E auth: ${tenantError?.message ?? "unknown error"}`,
-		);
-	}
-
-	const { data: usersData, error: listError } = await admin.auth.admin.listUsers();
-	if (listError) {
-		throw new Error(`Failed to list auth users: ${listError.message}`);
-	}
-
-	const existingUser = usersData.users.find(
-		(user) => user.email?.toLowerCase() === params.email.toLowerCase(),
-	);
-
-	const userId = existingUser?.id;
-
-	if (!userId) {
-		const { data: createdUser, error: createError } =
-			await admin.auth.admin.createUser({
-				email: params.email,
-				password: params.password,
-				email_confirm: true,
-			});
-
-		if (createError || !createdUser.user) {
-			throw new Error(
-				`Failed to create E2E user: ${createError?.message ?? "unknown error"}`,
-			);
-		}
-
-		await ensureMembership(admin, createdUser.user.id);
-		return;
-	}
-
-	const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
-		password: params.password,
-		email_confirm: true,
-	});
-	if (updateError) {
-		throw new Error(`Failed to update E2E user: ${updateError.message}`);
-	}
-
-	await ensureMembership(admin, userId);
-}
-
-async function ensureMembership(admin: ReturnType<typeof getAdminClient>, userId: string) {
-	const { error: membershipError } = await admin.from("memberships").upsert(
+	activeTenantId: string;
+}): Promise<AuthenticatedSession> {
+	const db = createClient(
+		params.target.supabaseUrl.href,
+		params.target.supabaseAnonKey,
 		{
-			tenant_id: DEFAULT_TENANT_ID,
-			user_id: userId,
-			role: "owner",
+			auth: {
+				autoRefreshToken: false,
+				detectSessionInUrl: false,
+				persistSession: false,
+			},
 		},
-		{ onConflict: "tenant_id,user_id" },
 	);
-
-	if (membershipError) {
+	const { data, error } = await db.auth.signInWithPassword({
+		email: params.email,
+		password: params.password,
+	});
+	if (error || !data.session) {
 		throw new Error(
-			`Failed to ensure E2E user membership: ${membershipError.message}`,
+			`Failed to authenticate a synthetic E2E actor: ${error?.message ?? "session missing"}`,
 		);
 	}
+
+	const authCookies = await serializeSsrSession(params.target, data.session);
+	return {
+		db,
+		storageState: {
+			cookies: [
+				...authCookies.map((cookie) => appCookie(params.target, cookie)),
+				{
+					name: "active_tenant_id",
+					value: params.activeTenantId,
+					domain: params.target.appUrl.hostname,
+					path: "/",
+					expires: -1,
+					httpOnly: false,
+					secure: params.target.appUrl.protocol === "https:",
+					sameSite: "Lax",
+				},
+			],
+			origins: [],
+		},
+	};
 }

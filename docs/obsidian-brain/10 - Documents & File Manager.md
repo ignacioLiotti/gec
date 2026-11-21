@@ -11,7 +11,7 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 ## Storage Architecture
 
 - **Bucket:** `obra-documents` (Supabase Storage)
-- **Path pattern:** `{tenant_id}/{obra_id}/{folder_path}/{filename}`
+- **Path pattern:** `{obra_id}/{folder_path}/{filename}`. Access resolves the obra's tenant and the actor's membership; the storage path has no tenant-ID segment.
 - Folders are virtual (paths in storage, not DB rows)
 - Folder structure comes from admin-configured defaults
 
@@ -37,6 +37,16 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 ---
 
 ## Document Tree API
+
+The active legacy Documents UI reads `GET /api/obras/[id]/documents/list`, optionally with `?path=<relative folder>`. Root and path responses include OCR table/schema metadata but do not load extracted rows. The route merges tracked-file metadata with one immediate Storage listing, so ordinary folders containing only `.keep` remain visible. Descendants load lazily when opened.
+
+A response folder with `childrenLoaded: true` describes its direct level. Ancestors with `childrenLoaded: false` are partial paths, not evidence that other siblings were deleted. The client merges those paths into its current tree and accepts async results only for their originating obra. Current selection is resolved against the merged tree rather than a captured pre-request selection.
+
+Automatic OCR failures persist a processing record and refresh the selected folder's derived data. The document can expose its failure and retry action without reloading the page. Retry uses the already stored source, preserving its Storage association, processing identity and source-linked rows.
+
+Folder creation is currently reachable through the context menu on an existing normal folder. The deep browser tests prepare that parent explicitly, then create normal and extraction child folders through the actual dialogs. They do not establish first-time root-folder creation. The newer Documents screen's creation affordance is outside this verification.
+
+Named upload, extraction, delayed navigation and document lifecycle evidence is recorded in [deep document QA](../../plans/2026-10-19-deep-document-qa/README.md). Synthetic Gemini responses prove application orchestration and persistence; live recognition quality remains a separate provider evaluation.
 
 `GET /api/obras/[id]/documents-tree`
 - Returns hierarchical folder+file structure
@@ -113,6 +123,11 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 - Background and manual draft saves do not reveal required-field errors while the order is still being completed; inline error emphasis appears only after an explicit generation attempt and uses a calm static state
 - Once obra, folder, document type, and template are selected, user edits to a purchase order are saved as a server draft after a short debounce; the draft ID is kept in the URL so a refresh or later return can restore it
 - The manual **Guardar borrador** action remains available, and source drafts are retained when a generated document is deleted
+- Draft save, assistance and generation admit one operation at a time. A save confirms only the revision it submitted; typing during the request stays pending, including inline edits made before blur. A failed autosave waits for another edit or an explicit retry.
+- Changing obra, folder or document type discards obsolete results and notifications. Switching templates retains the source draft identity and waits for an existing write to finish before writing the new template.
+- Generating from an existing draft first saves the requested revision and keeps later autosaves waiting until generation finishes. The server reloads that saved draft, so the generated artifact corresponds to the submitted revision even if typing continues.
+
+Client ownership and request-ordering decision: [ADR 0037](../adr/0037-document-generation-editor-session.md).
 
 ## Generated Document Download
 

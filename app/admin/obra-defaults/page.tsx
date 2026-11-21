@@ -1566,7 +1566,7 @@ function FolderRow({
           variant="ghost"
           size="icon"
           onClick={onMove}
-          className="text-content-muted"
+
           aria-label="Mover carpeta"
         >
           <FolderInput className="h-4 w-4" />
@@ -1576,7 +1576,7 @@ function FolderRow({
           variant="ghost"
           size="icon"
           onClick={onEdit}
-          className="text-content-muted"
+
           aria-label="Editar carpeta"
         >
           <Pencil className="size-4" />
@@ -1618,7 +1618,7 @@ function FolderRow({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-sm truncate">{folder.name}</p>
-                  <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                  <Badge variant={"warning"} size="xs" className="text-[10px]">
                     Extracción
                   </Badge>
                 </div>
@@ -1654,7 +1654,7 @@ function FolderRow({
                     e.stopPropagation();
                     onMove();
                   }}
-                  className="text-content-muted"
+
                   aria-label="Mover carpeta"
                 >
                   <FolderInput className="h-4 w-4" />
@@ -1667,7 +1667,7 @@ function FolderRow({
                     e.stopPropagation();
                     onEdit();
                   }}
-                  className="text-content-muted"
+
                   aria-label="Editar carpeta"
                 >
                   <Pencil className="size-4" />
@@ -3362,7 +3362,7 @@ export default function ObraDefaultsPage() {
         onValueChange={setActiveSection}
         className={cn(adminPageMaxWidthClass, "mt-4 space-y-4")}
       >
-        <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto bg-surface-recessed p-1 sm:w-fit">
+        <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto p-1 sm:w-fit">
           <TabsTrigger value="structure" className="gap-2 whitespace-nowrap">
             <Folder className="size-4" />
             Carpetas
@@ -3820,7 +3820,7 @@ export default function ObraDefaultsPage() {
                   resetFolderForm();
                   setIsAddFolderOpen(true);
                 }}
-                className="bg-amber-500 hover:bg-amber-600 text-white"
+
               >
                 <Plus className="size-4 mr-2" />
                 Nueva carpeta
@@ -3870,7 +3870,7 @@ export default function ObraDefaultsPage() {
               </div>
               <Button
                 onClick={() => setIsAddQuickActionOpen(true)}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
+
               >
                 <Plus className="size-4 mr-2" />
                 Nueva acción
@@ -3910,10 +3910,10 @@ export default function ObraDefaultsPage() {
                           </p>
                         </div>
                         <Button
-                          variant="ghost"
+                          variant={"destructiveSecondary"}
                           size="icon"
                           onClick={() => handleDeleteQuickAction(action.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -3954,7 +3954,7 @@ export default function ObraDefaultsPage() {
               </div>
               <Button
                 onClick={() => setIsOcrConfigOpen(true)}
-                className="bg-purple-500 hover:bg-purple-600 text-white"
+
               >
                 <Plus className="size-4 mr-2" />
                 Nueva plantilla
@@ -4022,7 +4022,7 @@ export default function ObraDefaultsPage() {
                         Paso {folderEditorStep + 1} de{" "}
                         {folderEditorSteps.length}
                       </span>
-                      <Badge variant="outline" className="rounded-full">
+                      <Badge shape="pill" variant="outline" >
                         {Math.round(folderProgressValue)}%
                       </Badge>
                     </div>
@@ -4422,7 +4422,7 @@ export default function ObraDefaultsPage() {
                           <Button
                             type="button"
                             onClick={handleImportDefinitionJson}
-                            className="bg-amber-500 hover:bg-amber-600"
+
                           >
                             <Sparkles className="size-4 mr-2" />
                             Importar definicion
@@ -4490,7 +4490,7 @@ export default function ObraDefaultsPage() {
                     <div className="space-y-2">
                       <Label>Plantilla de extracción XLSX/CSV</Label>
                       <Select
-                        value={newFolderSpreadsheetTemplate || undefined}
+                        value={newFolderSpreadsheetTemplate}
                         onValueChange={(value) =>
                           setNewFolderSpreadsheetTemplate(
                             value as "auto" | "certificado",
@@ -4523,7 +4523,7 @@ export default function ObraDefaultsPage() {
                           </div>
                         ) : (
                           <Select
-                            value={newFolderOcrTemplateId || undefined}
+                            value={newFolderOcrTemplateId}
                             onValueChange={handleTemplateSelect}
                           >
                             <SelectTrigger>
@@ -4699,10 +4699,10 @@ export default function ObraDefaultsPage() {
                             )}
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant={"destructiveSecondary"}
                               size="icon"
                               onClick={() => handleRemoveColumn(col.id)}
-                              className="size-8 text-destructive hover:text-destructive"
+                              className="size-8"
                             >
                               <X className="size-4" />
                             </Button>
@@ -5299,7 +5299,7 @@ export default function ObraDefaultsPage() {
                     type="button"
                     variant="link"
                     onClick={handleAddExtractedTable}
-                    className="px-0 text-orange-500"
+                    className="px-0"
                     data-testid="add-extracted-table"
                   >
                     + Agregar otro grupo
@@ -5428,7 +5428,7 @@ export default function ObraDefaultsPage() {
                               <div className="space-y-2">
                                 <Label>¿Qué tipo de documento vas a subir?</Label>
                                 <Select
-                                  value={newFolderOcrTemplateId || undefined}
+                                  value={newFolderOcrTemplateId}
                                   onValueChange={handleTemplateSelect}
                                 >
                                   <SelectTrigger data-testid="ocr-template-select">
@@ -5586,7 +5586,7 @@ export default function ObraDefaultsPage() {
                       type="button"
                       variant="link"
                       onClick={handleAddColumn}
-                      className="px-0 text-orange-500"
+                      className="px-0"
                     >
                       + Agregar dato
                     </Button>
@@ -5653,10 +5653,10 @@ export default function ObraDefaultsPage() {
                             </div>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant={"destructiveSecondary"}
                               size="icon"
                               onClick={() => handleRemoveColumn(col.id)}
-                              className="text-destructive hover:text-destructive"
+
                               aria-label={`Eliminar ${col.label || "dato"}`}
                             >
                               <X className="size-4" />
@@ -5776,7 +5776,7 @@ export default function ObraDefaultsPage() {
                     type="button"
                     variant="ghost"
                     size="lg"
-                    className="text-muted-foreground"
+
                     onClick={() => {
                       setIsAddFolderOpen(false);
                       resetFolderForm();
@@ -5941,7 +5941,7 @@ export default function ObraDefaultsPage() {
                           <Button
                             type="button"
                             onClick={handleImportDefinitionJson}
-                            className="bg-amber-500 hover:bg-amber-600"
+
                           >
                             <Sparkles className="size-4 mr-2" />
                             Importar definicion
@@ -6073,12 +6073,12 @@ export default function ObraDefaultsPage() {
                               />
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant={"destructiveSecondary"}
                                 size="icon"
                                 onClick={() =>
                                   handleRemoveExtractedTable(table.id)
                                 }
-                                className="text-destructive hover:text-destructive"
+
                               >
                                 <Trash2 className="size-4" />
                               </Button>
@@ -6174,7 +6174,7 @@ export default function ObraDefaultsPage() {
                     <div className="space-y-2">
                       <Label>Plantilla de extracción XLSX/CSV</Label>
                       <Select
-                        value={newFolderSpreadsheetTemplate || undefined}
+                        value={newFolderSpreadsheetTemplate}
                         onValueChange={(value) =>
                           setNewFolderSpreadsheetTemplate(
                             value as "auto" | "certificado",
@@ -6207,7 +6207,7 @@ export default function ObraDefaultsPage() {
                         </div>
                       ) : (
                         <Select
-                          value={newFolderOcrTemplateId || undefined}
+                          value={newFolderOcrTemplateId}
                           onValueChange={handleTemplateSelect}
                         >
                           <SelectTrigger>
@@ -6382,10 +6382,10 @@ export default function ObraDefaultsPage() {
                                 )}
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant={"destructiveSecondary"}
                                 size="icon"
                                 onClick={() => handleRemoveColumn(col.id)}
-                                className="size-8 text-destructive hover:text-destructive"
+                                className="size-8"
                               >
                                 <X className="size-4" />
                               </Button>
@@ -6464,7 +6464,7 @@ export default function ObraDefaultsPage() {
               <Button
                 onClick={() => void handleSaveFolder()}
                 disabled={isSubmittingFolder || isCreateFolderDisabled}
-                className="bg-amber-500 hover:bg-amber-600"
+
               >
                 {isSubmittingFolder ? (
                   <Loader2 className="size-4 animate-spin mr-2" />

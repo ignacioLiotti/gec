@@ -494,7 +494,7 @@ export function QuickActionsPanel({
           <Button
             type="button"
             onClick={() => setIsMobileOpen(true)}
-            className="fixed bottom-5 right-4 z-40 h-12 rounded-full px-4 shadow-lg"
+            className="fixed bottom-5 right-4 z-40 h-12 px-4"
           >
             <Zap className="size-4" />
             <span className="ml-2 text-sm font-semibold">Acciones</span>
@@ -741,12 +741,7 @@ export function QuickActionsPanel({
                                   value={String((manualValues[currentStepId] ?? {})[column.fieldKey] ?? "")}
                                   onChange={(event) => handleManualChange(currentStepId, column.fieldKey, event.target.value)}
                                   autoComplete="off"
-                                  className={cn(
-                                    "w-full rounded-md border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900",
-                                    "placeholder:text-stone-400",
-                                    "focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20",
-                                    "transition-all duration-200"
-                                  )}
+                                  className={cn("w-full px-3 py-2.5 text-sm", "transition-all duration-200")}
                                 />
                               </div>
                             ))

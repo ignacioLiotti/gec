@@ -201,7 +201,7 @@ export function ObrasTrashPageClient() {
 	if (isTenantAdminLoading) {
 		return (
 			<div className="p-6">
-				<Card className="p-6 text-sm text-stone-600 flex items-center gap-2">
+				<Card className="p-6 text-sm flex items-center gap-2">
 					<Loader2 className="size-4 animate-spin" />
 					Verificando permisos&hellip;
 				</Card>

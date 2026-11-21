@@ -1,0 +1,394 @@
+.screen {
+  container: obras / inline-size;
+  display: grid;
+  gap: 24px;
+  min-inline-size: 0;
+  color: var(--gp-ink);
+}
+
+.headingActions,
+.tabsRow,
+.toolbar,
+.tableFooter,
+.progressCell {
+  display: flex;
+  align-items: center;
+}
+
+.headingActions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tabsRow {
+  min-inline-size: 0;
+  justify-content: space-between;
+  gap: 16px;
+  border-block-end: 1px solid var(--gp-line);
+  padding-block-end: 12px;
+}
+
+.tabsList {
+  max-inline-size: 100%;
+  min-block-size: 40px;
+  overflow-x: auto;
+  background: var(--gp-sunk);
+}
+
+.selectionSummary,
+.tableFooter {
+  color: var(--gp-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.selectionSummary {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.tablePanel {
+  min-inline-size: 0;
+}
+
+.toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block-end: 12px;
+}
+
+.searchField {
+  position: relative;
+  flex: 1 1 280px;
+  min-inline-size: min(100%, 220px);
+}
+
+.searchIcon {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 12px;
+  inline-size: 16px;
+  block-size: 16px;
+  color: var(--gp-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.searchInput {
+  block-size: 40px;
+  padding-inline-start: 36px;
+}
+
+.filterControl,
+.entityFilter {
+  block-size: 40px;
+}
+
+.filterControl {
+  inline-size: 148px;
+}
+
+.entityFilter {
+  inline-size: min(100%, 230px);
+}
+
+.columnsMenu {
+  min-inline-size: 220px;
+}
+
+.tableRegion {
+  max-block-size: min(64vh, 44rem);
+  min-inline-size: 0;
+  overflow: auto;
+  border-block: 1px solid var(--gp-line);
+  outline: none;
+  scrollbar-color: var(--gp-strong) transparent;
+}
+
+.tableRegion:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--gp-accent);
+}
+
+.tableRegion [data-slot="table-container"] {
+  overflow: visible;
+}
+
+.table {
+  min-inline-size: 78rem;
+  color: var(--gp-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tableHead {
+  block-size: 44px;
+  padding: 0;
+  background: var(--gp-sunk);
+  color: var(--gp-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.sortButton {
+  inline-size: 100%;
+  min-block-size: 40px;
+  block-size: auto;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: start;
+  text-transform: inherit;
+  white-space: normal;
+}
+
+.sortButton svg {
+  inline-size: 13px;
+  block-size: 13px;
+  opacity: 0.7;
+}
+
+.sortButtonNumeric {
+  justify-content: flex-end;
+  text-align: end;
+}
+
+.tableRow {
+  block-size: 48px;
+  cursor: pointer;
+  background: var(--gp-panel);
+  transition: background-color 120ms var(--gp-ease);
+}
+
+.tableRow:hover,
+.tableRow[data-state="selected"] {
+  background: var(--gp-sunk);
+}
+
+.tableRow:focus-visible {
+  outline: 2px solid var(--gp-accent);
+  outline-offset: -2px;
+}
+
+.tableCell {
+  block-size: 48px;
+  padding: 8px 10px;
+  color: var(--gp-secondary);
+}
+
+.selectionColumn,
+.actionsColumn {
+  inline-size: 44px;
+  min-inline-size: 44px;
+  padding-inline: 10px;
+  text-align: center;
+}
+
+.numberColumn {
+  inline-size: 64px;
+  min-inline-size: 64px;
+}
+
+.nameColumn {
+  min-inline-size: 250px;
+  white-space: normal;
+}
+
+.entityColumn {
+  min-inline-size: 200px;
+  white-space: normal;
+}
+
+.progressColumn {
+  min-inline-size: 150px;
+}
+
+.moneyColumn {
+  min-inline-size: 178px;
+}
+
+.numericCell {
+  text-align: end;
+}
+
+.obraName {
+  color: var(--gp-ink);
+  font-weight: 650;
+  line-height: 1.3;
+  text-wrap: pretty;
+}
+
+.progressCell {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.progressTrack {
+  inline-size: 58px;
+  block-size: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gp-line);
+}
+
+.progressFill {
+  display: block;
+  inline-size: var(--progress);
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--gp-accent);
+}
+
+.tableFooter {
+  justify-content: flex-end;
+  gap: 16px;
+  padding-block-start: 12px;
+}
+
+.dialogContent {
+  max-block-size: min(90vh, 48rem);
+  overflow: hidden;
+}
+
+.dialogForm {
+  display: flex;
+  max-block-size: min(90vh, 48rem);
+  flex-direction: column;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.formField {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.formFieldWide {
+  grid-column: span 2;
+}
+
+.importDialog {
+  max-inline-size: 34rem;
+}
+
+.importBody {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.importPreview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--gp-line);
+  border-radius: 10px;
+  background: var(--gp-line);
+}
+
+.importPreview div {
+  min-inline-size: 0;
+  padding: 12px;
+  background: var(--gp-panel);
+}
+
+.importPreview dt {
+  margin-block-end: 4px;
+  color: var(--gp-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.importPreview dd {
+  margin: 0;
+  color: var(--gp-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@container obras (width < 52rem) {
+  .tabsRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tabsList {
+    inline-size: 100%;
+  }
+
+  .selectionSummary {
+    align-self: flex-end;
+  }
+
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .searchField {
+    flex-basis: 100%;
+  }
+
+  .filterControl,
+  .entityFilter {
+    flex: 1 1 180px;
+    inline-size: auto;
+  }
+
+  .tableFooter {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 40rem) {
+  .headingActions {
+    inline-size: 100%;
+    justify-content: flex-start;
+  }
+
+  .formGrid,
+  .importPreview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formFieldWide {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tableRow {
+    transition: none;
+  }
+}

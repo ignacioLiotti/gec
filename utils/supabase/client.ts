@@ -18,5 +18,20 @@ export function createSupabaseBrowserClient() {
 		);
 	}
 
+	const configuredHost = new URL(url).hostname;
+	const useLocalBridge =
+		process.env.NODE_ENV === "development" &&
+		["127.0.0.1", "localhost", "[::1]"].includes(configuredHost) &&
+		typeof window !== "undefined" &&
+		window.location.protocol === "https:" &&
+		window.location.hostname.endsWith(".trycloudflare.com");
+	if (useLocalBridge) {
+		return createBrowserClient(
+			`${window.location.origin}/__sintesis_supabase`,
+			anonKey,
+			{ cookieOptions: { name: `sb-${configuredHost.split(".")[0]}-auth-token` } },
+		);
+	}
+
 	return createBrowserClient(url, anonKey);
 }

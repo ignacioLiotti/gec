@@ -1,5 +1,9 @@
 "use client";
 
+import { getInsurancePolicyStatus, insurancePolicyStatusLabels } from "@/lib/insurance-policy-status";
+import { insurancePolicyStatusClasses as statusClasses, insurancePolicyProgressClasses as statusProgressClasses, insurancePolicyAccentClasses as statusAccentClasses, insurancePolicyStatusClasses as statusPillClasses } from "@/components/insurance-policy-status";
+
+
 import { useDeferredValue, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -260,34 +264,16 @@ function daysUntil(value: string | null | undefined) {
 	return Math.ceil((target - start) / 86_400_000);
 }
 
-function policyStatus(policy: Policy): PolicyStatus {
-	if (policy.is_cancelled) return "cancelled";
-	if (isFinalizedActivePolicy(policy)) return "expired";
-	if (policy.cancellation_rule_configured !== true) return "active";
-	const days = daysUntil(policy.calculated_cancellation_date);
-	if (days !== null && days < 0) return "expired";
-	if (days !== null && days <= 60) return "dueSoon";
-	return "active";
-}
+function policyStatus(policy: Policy): PolicyStatus { return getInsurancePolicyStatus({ isCancelled: policy.is_cancelled, endDate: policy.end_date, calculatedCancellationDate: policy.cancellation_rule_configured === true ? policy.calculated_cancellation_date : null }); }
 
 function isFinalizedActivePolicy(policy: Policy) {
 	const days = daysUntil(policy.end_date);
 	return !policy.is_cancelled && days !== null && days < 0;
 }
 
-function statusLabel(status: PolicyStatus) {
-	if (status === "cancelled") return "Dada de baja";
-	if (status === "expired") return "Vencida";
-	if (status === "dueSoon") return "Por vencer";
-	return "Vigente";
-}
+const statusLabel = (status: PolicyStatus) => insurancePolicyStatusLabels[status];
 
-function statusClasses(status: PolicyStatus) {
-	if (status === "cancelled") return "border-sky-200 bg-sky-50 text-sky-800";
-	if (status === "expired") return "border-orange-300 bg-orange-50 text-orange-700";
-	if (status === "dueSoon") return "border-amber-200 bg-amber-50 text-amber-700";
-	return "border-emerald-200 bg-emerald-50 text-emerald-700";
-}
+
 
 function statusHeaderGradient(status: PolicyStatus) {
 	if (status === "cancelled") return "from-sky-50/95 via-white to-white";
@@ -295,26 +281,11 @@ function statusHeaderGradient(status: PolicyStatus) {
 	return "from-emerald-50/95 to-white";
 }
 
-function statusAccentClasses(status: PolicyStatus) {
-	if (status === "cancelled") return "text-sky-800";
-	if (status === "expired") return "text-orange-700";
-	if (status === "dueSoon") return "text-amber-700";
-	return "text-emerald-700";
-}
 
-function statusProgressClasses(status: PolicyStatus) {
-	if (status === "cancelled") return "bg-sky-500";
-	if (status === "expired") return "bg-orange-500";
-	if (status === "dueSoon") return "bg-amber-500";
-	return "bg-emerald-500";
-}
 
-function statusPillClasses(status: PolicyStatus) {
-	if (status === "cancelled") return "border-sky-200 bg-sky-50 text-sky-800";
-	if (status === "expired") return "border-orange-200 bg-orange-50 text-orange-700";
-	if (status === "dueSoon") return "border-amber-200 bg-amber-50 text-amber-700";
-	return "border-emerald-200 bg-emerald-50 text-emerald-700";
-}
+
+
+
 
 function selectedPolicyRowClasses(status: PolicyStatus) {
 	if (status === "cancelled") return "bg-sky-50/65 shadow-card border-l-4 border-sky-300";
@@ -454,14 +425,14 @@ function DetailField({
 			<div className="flex items-start justify-between gap-2">
 				<p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">{label}</p>
 				{onEdit ? (
-					<button
+					<Button variant={"defaultSecondary"}
 						type="button"
-						className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-stone-500 transition hover:border-orange-200 hover:text-orange-700"
+						className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] transition"
 						onClick={onEdit}
 					>
 						<Pencil className="size-3" />
 						Editar
-					</button>
+					</Button>
 				) : (
 					<FieldBadge tone={tone}>
 						{tone === "imported" ? "Excel" : tone === "system" ? "Sistema" : "Editable"}
@@ -550,7 +521,7 @@ function EmptyPolicyListState({ onImportHint }: { onImportHint: () => void }) {
 					type="button"
 					variant="outline"
 					size="sm"
-					className="mx-auto mt-4 flex h-9 w-[170px] justify-center gap-2 rounded-lg px-3 text-xs font-semibold"
+					className="mx-auto mt-4 flex h-9 w-[170px] justify-center gap-2 px-3 text-xs font-semibold"
 					onClick={onImportHint}
 				>
 					<FileSpreadsheet className="size-3.5 text-emerald-600" />
@@ -580,14 +551,14 @@ function EmptyPolicyDetailState({ onImportHint }: { onImportHint: () => void }) 
 						<Plus className="size-3 rounded-full bg-surface text-content-muted" />
 						Elige una poliza
 					</span>
-					<button
+					<Button variant={"secondary"}
 						type="button"
-						className="inline-flex items-center gap-1.5 rounded-full border border-stroke-soft bg-surface-recessed px-2.5 py-1 transition hover:bg-surface"
+						className="inline-flex items-center gap-1.5 px-2.5 py-1 transition"
 						onClick={onImportHint}
 					>
 						<FileSpreadsheet className="size-3 text-emerald-600" />
 						Importa desde Excel
-					</button>
+					</Button>
 				</div>
 			</div>
 		</div>
@@ -987,7 +958,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 							value={searchTerm}
 							onChange={(event) => setSearchTerm(event.target.value)}
 							placeholder="Buscar poliza"
-							className="h-10 rounded-lg bg-surface pl-9 text-sm"
+							className="h-10 pl-9 text-sm"
 						/>
 					</div>
 					<div className="grid grid-cols-3 gap-1.5">
@@ -996,13 +967,8 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 								key={filter.value}
 								type="button"
 								size="sm"
-								variant={statusFilter === filter.value ? "default" : "ghost"}
-								className={cn(
-									"h-8 w-full justify-between gap-1 rounded-lg px-2.5 text-[11px] font-bold",
-									statusFilter === filter.value
-										? "bg-stone-900 text-white hover:bg-stone-800"
-										: "text-content-secondary hover:bg-surface-recessed",
-								)}
+								variant={(statusFilter === filter.value) ? ("dark") : (statusFilter === filter.value ? "default" : "ghost")}
+								className={"h-8 w-full justify-between gap-1 px-2.5 text-[11px] font-bold"}
 								onClick={() => setStatusFilter(filter.value)}
 							>
 								<span className="min-w-0 truncate">{filter.label}</span>
@@ -1104,7 +1070,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 						<p className="text-[10px] font-bold uppercase tracking-[0.18em] text-content-muted">
 							Agregar poliza
 						</p>
-						<Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px] font-semibold">
+						<Badge shape="pill" size="xs" variant="outline" className="px-2 py-0.5 text-[10px] font-semibold">
 							Carga manual
 						</Badge>
 					</div>
@@ -1186,9 +1152,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 							<div className="flex shrink-0 flex-wrap items-center gap-2">
 								<Button
 									type="button"
-									variant="outline"
+									variant={"secondary"}
 									size="sm"
-									className="h-10 gap-2 rounded-lg bg-white"
+									className="h-10 gap-2"
 									onClick={() => openMovePolicyDialog(selectedPolicy)}
 								>
 									<ArrowRight className="size-4" />
@@ -1196,9 +1162,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 								</Button>
 								<Button
 									type="button"
-									variant="outline"
+									variant={"destructiveSecondary"}
 									size="sm"
-									className="h-10 gap-2 rounded-lg border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 hover:text-red-800"
+									className="h-10 gap-2"
 									onClick={() => setDeletePolicy(selectedPolicy)}
 								>
 									<Trash2 className="size-4" />
@@ -1232,7 +1198,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 											value={selectedDraft.insuredAmount}
 											placeholder="Monto asegurado"
 											inputMode="decimal"
-											className="mt-2 h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+											className="mt-2 h-9"
 											onChange={(event) => updatePolicyDraft(selectedPolicy, { insuredAmount: event.target.value })}
 										/>
 									) : (
@@ -1247,7 +1213,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 											<Input
 												type="date"
 												value={selectedDraft.endDate}
-												className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+												className="h-9"
 												onChange={(event) => updatePolicyDraft(selectedPolicy, { endDate: event.target.value })}
 											/>
 											<p className="text-xs font-semibold text-stone-500">
@@ -1271,14 +1237,14 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 									onEdit={responsibleUserIds.length > 0 ? () => setEditingSection("responsibles") : undefined}
 								>
 									{responsibleUserIds.length === 0 && editingSection !== "responsibles" ? (
-										<button
+										<Button variant="outline"
 											type="button"
-											className="mt-3 inline-flex h-9 items-center gap-2 rounded-md border border-dashed border-blue-300 bg-blue-50/35 px-3 text-xs font-bold text-blue-700 transition hover:border-blue-400 hover:bg-blue-50"
+											className="mt-3 inline-flex h-9 items-center gap-2 px-3 text-xs font-bold transition"
 											onClick={() => setEditingSection("responsibles")}
 										>
 											<Plus className="size-3.5" />
 											Asignar responsable
-										</button>
+										</Button>
 									) : (
 										<div className="mt-3 flex flex-wrap gap-1.5">
 											{users
@@ -1322,7 +1288,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 											<Button
 												type="button"
 												size="sm"
-												className="h-8 gap-1.5 bg-orange-600 px-3 text-xs font-bold text-white hover:bg-orange-700"
+												className="h-8 gap-1.5 px-3 text-xs font-bold"
 												onClick={() => {
 													setEditingSection("calculatedDate");
 													updatePolicyDraft(selectedPolicy, { cancellationRuleConfigured: true });
@@ -1374,7 +1340,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 													value={selectedDraft.cancellationRuleType}
 													onValueChange={(value) => updatePolicyDraft(selectedPolicy, { cancellationRuleType: value as RuleType, cancellationRuleConfigured: true })}
 												>
-													<SelectTrigger className="h-9 rounded-lg border-orange-300 bg-white focus:ring-orange-200">
+													<SelectTrigger className="h-9">
 														<SelectValue />
 													</SelectTrigger>
 													<SelectContent className="rounded-xl">
@@ -1388,7 +1354,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 													min={0}
 													value={selectedDraft.cancellationRuleOffset}
 													disabled={selectedDraft.cancellationRuleType === "on_finish"}
-													className="h-9 bg-white"
+													className="h-9"
 													onChange={(event) => updatePolicyDraft(selectedPolicy, { cancellationRuleOffset: event.target.value, cancellationRuleConfigured: true })}
 												/>
 												<div className="sm:col-span-2">
@@ -1398,7 +1364,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 													<Input
 														type="date"
 														value={selectedDraft.definitiveReceptionDate}
-														className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+														className="h-9"
 														onChange={(event) => updatePolicyDraft(selectedPolicy, { definitiveReceptionDate: event.target.value, cancellationRuleConfigured: true })}
 													/>
 													<p className="mt-1 text-[11px] font-medium text-stone-500">
@@ -1420,7 +1386,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 													value={selectedDraft.prize}
 													placeholder="Premio"
 													inputMode="decimal"
-													className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+													className="h-9"
 													onChange={(event) => updatePolicyDraft(selectedPolicy, { prize: event.target.value })}
 												/>
 											</label>
@@ -1432,7 +1398,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 													value={selectedDraft.premium}
 													placeholder="Prima"
 													inputMode="decimal"
-													className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+													className="h-9"
 													onChange={(event) => updatePolicyDraft(selectedPolicy, { premium: event.target.value })}
 												/>
 											</label>
@@ -1454,13 +1420,13 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 											<Input
 												value={selectedDraft.balance}
 												placeholder="Saldo"
-												className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+												className="h-9"
 												onChange={(event) => updatePolicyDraft(selectedPolicy, { balance: event.target.value })}
 											/>
 											<Input
 												value={selectedDraft.status}
 												placeholder="Estado importado"
-												className="h-9 border-orange-200 bg-white focus-visible:ring-orange-200"
+												className="h-9"
 												onChange={(event) => updatePolicyDraft(selectedPolicy, { status: event.target.value })}
 											/>
 										</div>
@@ -1468,7 +1434,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 										<p className="mt-2 flex flex-wrap items-center gap-3 text-xl font-black tracking-tight text-stone-900">
 											{formatMoney(selectedDraft.balance, selectedPolicy.currency)}
 											{selectedDraft.status ? (
-												<Badge variant="secondary" className={cn("rounded-full px-2.5 py-1 text-[10px] font-bold", statusClasses(selectedPolicyItem?.status ?? "active"))}>
+												<Badge shape="pill" size="xs" variant="secondary" className={cn("px-2.5 py-1 text-[10px] font-bold", statusClasses(selectedPolicyItem?.status ?? "active"))}>
 													{selectedDraft.status}
 												</Badge>
 											) : null}
@@ -1481,7 +1447,7 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 								{selectedDirty ? (
 									<Button
 										size="sm"
-										className="gap-2 bg-orange-600 text-white hover:bg-orange-700"
+										className="gap-2"
 										disabled={savingPolicyId === selectedPolicy.id}
 										onClick={() => void savePolicyDraft(selectedPolicy)}
 									>
@@ -1610,9 +1576,9 @@ export function InsurancePoliciesTab({ obraId }: { obraId: string }) {
 						>
 							Cancelar
 						</Button>
-						<Button
+						<Button variant={"destructive"}
 							type="button"
-							className="gap-2 bg-red-600 text-white hover:bg-red-700"
+							className="gap-2"
 							disabled={Boolean(deletingPolicyId)}
 							onClick={() => void deleteSelectedPolicy()}
 						>

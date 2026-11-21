@@ -1,4 +1,7 @@
 "use client";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Button } from "@/components/ui/button";
+
 
 import { useEffect, useState } from "react";
 import UserOverrides from "./user-overrides";
@@ -56,11 +59,11 @@ export default function UserAssignments({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <select value={selectedUser ?? ""} onChange={(e) => setSelectedUser(e.target.value)} className="rounded-md border bg-background px-2 py-1 text-sm">
+        <NativeSelect value={selectedUser ?? ""} onChange={(e) => setSelectedUser(e.target.value)} className="px-2 py-1 text-sm">
           {users.map((u) => (
             <option key={u.user_id} value={u.user_id}>{u.full_name ?? u.email ?? u.user_id}</option>
           ))}
-        </select>
+        </NativeSelect>
         {loading && <span className="text-xs text-foreground/60">Loading?</span>}
       </div>
       <div className="overflow-hidden rounded-md border">
@@ -77,9 +80,9 @@ export default function UserAssignments({
                 <td className="px-3 py-2">{r.name}</td>
                 <td className="px-3 py-2">
                   {assignedIds.has(r.id) ? (
-                    <button onClick={() => revoke(r.id)} className="rounded-md border px-2 py-1 text-xs hover:bg-foreground/10">Revoke</button>
+                    <Button variant="outline" onClick={() => revoke(r.id)} className="px-2 py-1 text-xs">Revoke</Button>
                   ) : (
-                    <button onClick={() => assign(r.id)} className="rounded-md bg-black px-2 py-1 text-xs text-white hover:bg-black/90">Assign</button>
+                    <Button variant="outline" onClick={() => assign(r.id)} className="px-2 py-1 text-xs">Assign</Button>
                   )}
                 </td>
               </tr>

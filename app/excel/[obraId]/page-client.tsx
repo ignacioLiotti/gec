@@ -3793,7 +3793,7 @@ function ObraDetailPageContent({
 									{isObraAtRisk && (
 										<Tooltip>
 											<TooltipTrigger asChild>
-												<Badge className="bg-amber-100 text-amber-800 border-amber-200 rounded-md py-1.5">
+												<Badge variant={"warning"} className="py-1.5">
 													<AlertTriangle className="size-3.5 mr-1" />
 													{obraDelay}% atrasada
 												</Badge>
@@ -3855,7 +3855,7 @@ function ObraDetailPageContent({
 														type="button"
 														variant={!isGeneralTabEditMode ? "default" : "ghost"}
 														size="sm"
-														className="h-8 min-w-8 justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none sm:min-w-[7.75rem]"
+														className="h-8 min-w-8 justify-center gap-1.5 px-2.5 text-sm leading-none sm:min-w-[7.75rem]"
 														aria-pressed={!isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(false)}
 													>
@@ -3866,7 +3866,7 @@ function ObraDetailPageContent({
 														type="button"
 														variant={isGeneralTabEditMode ? "default" : "ghost"}
 														size="sm"
-														className="h-8 min-w-8 justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none sm:min-w-[7.75rem]"
+														className="h-8 min-w-8 justify-center gap-1.5 px-2.5 text-sm leading-none sm:min-w-[7.75rem]"
 														aria-pressed={isGeneralTabEditMode}
 														onClick={() => setIsGeneralTabEditMode(true)}
 													>

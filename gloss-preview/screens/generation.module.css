@@ -1,0 +1,225 @@
+.screen {
+  container: generation / inline-size;
+  min-inline-size: 0;
+  display: grid;
+  gap: 24px;
+}
+.screen :global(.gp-heading) {
+  margin-bottom: 0;
+}
+.context {
+  min-inline-size: 0;
+  border-block: 1px solid var(--gp-line);
+  padding: 14px 0;
+}
+.contextSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.contextPath {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  color: var(--gp-secondary);
+  font-size: 13px;
+}
+.contextPath > svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  stroke-width: 1.5;
+  color: var(--gp-muted);
+}
+.contextPath strong {
+  font-weight: 550;
+}
+.contextPath span {
+  color: var(--gp-muted);
+}
+.contextCaption {
+  font-size: 11px;
+  color: var(--gp-muted);
+  margin: 4px 0 0 25px;
+}
+.contextCaption span {
+  margin-inline: 6px;
+}
+.disclosureIcon {
+  transition: rotate 180ms var(--gp-ease);
+}
+.disclosureIcon[data-open="true"] {
+  rotate: 180deg;
+}
+.contextFields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 28px;
+  border-top: 1px solid var(--gp-line);
+  margin-top: 14px;
+  padding-top: 20px;
+  min-inline-size: 0;
+}
+.contextFields[hidden] {
+  display: none;
+}
+.contextSelects {
+  display: grid;
+  gap: 16px;
+}
+.contextSelects > div {
+  display: grid;
+  gap: 7px;
+  min-inline-size: 0;
+}
+.contextSelects label,
+.templateLabel {
+  font-size: 12px;
+  font-weight: 500;
+}
+.contextSelects select {
+  width: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.templateLabel {
+  margin: 0 0 7px;
+}
+.templates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.template {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--gp-line);
+  border-radius: 12px;
+  background: var(--gp-panel);
+  cursor: pointer;
+  min-inline-size: 0;
+  transition:
+    background-color 150ms var(--gp-ease),
+    border-color 150ms var(--gp-ease);
+}
+.template[data-selected="true"] {
+  border-color: var(--gp-ink);
+  background: var(--gp-sunk);
+}
+.template > span:nth-child(2) {
+  display: grid;
+  gap: 6px;
+  min-inline-size: 0;
+  flex: 1;
+}
+.template small {
+  font-size: 10px;
+  color: var(--gp-muted);
+}
+.template strong {
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+.template > span > span {
+  font-size: 11px;
+  color: var(--gp-muted);
+  line-height: 1.5;
+}
+.templateIcon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--gp-strong);
+  border-radius: 5px;
+  color: var(--gp-accent);
+}
+.templateIcon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.5;
+}
+.template :global([data-slot="radio-group-item"]) {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.fieldError {
+  color: var(--gp-accent);
+  font-size: 12px;
+  margin: 0;
+}
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 24px;
+  min-inline-size: 0;
+}
+.sessionNote {
+  font-size: 11px;
+  color: var(--gp-muted);
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  margin: 0;
+}
+.sessionNote svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@container generation (width < 1040px) {
+  .workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .contextFields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+@container generation (width < 560px) {
+  .contextSummary {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .contextPath {
+    gap: 7px;
+  }
+  .contextPath strong {
+    flex-basis: calc(100% - 24px);
+  }
+  .contextPath > svg:nth-of-type(2) {
+    display: none;
+  }
+  .templates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .contextCaption {
+    margin-left: 0;
+  }
+  .contextSummary > button {
+    flex-shrink: 0;
+  }
+  .contextSelects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sessionNote {
+    margin-bottom: 4px;
+  }
+}

@@ -141,7 +141,7 @@ export default function InvitationPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
-        <Card className="w-full max-w-md border-stroke-soft shadow-card">
+        <Card className="w-full max-w-md">
           <CardContent className="flex items-center justify-center py-12">
             <Loader2 className="size-8 animate-spin text-stone-400" />
           </CardContent>
@@ -153,7 +153,7 @@ export default function InvitationPage() {
   if (error && !invitation) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
-        <Card className="w-full max-w-md border-destructive/30 shadow-card">
+        <Card variant={"destructive"} className="w-full max-w-md">
           <CardHeader>
             <div className="flex items-center gap-2">
               <XCircle className="size-6 text-red-500" />
@@ -182,7 +182,7 @@ export default function InvitationPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-canvas p-4">
-      <Card className="w-full max-w-lg border-stroke-soft shadow-card">
+      <Card className="w-full max-w-lg">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="rounded-xl border border-orange-primary/25 bg-orange-primary/10 p-4 text-orange-primary shadow-sm">
@@ -301,7 +301,7 @@ export default function InvitationPage() {
           {user && !isExpired && !error ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button type="button" variant="ghost" className="w-full text-destructive" disabled={processing}>
+                <Button type="button" variant={"destructiveSecondary"} className="w-full" disabled={processing}>
                   Rechazar invitación
                 </Button>
               </AlertDialogTrigger>

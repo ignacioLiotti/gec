@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "enabled": false,
+  "source": {
+    "environment": "production",
+    "projectRef": null,
+    "credentialSecretRef": null
+  },
+  "schedule": {
+    "timeZone": "UTC",
+    "cronExpression": null,
+    "staleAfterHours": null
+  },
+  "recoveryObjectives": {
+    "maximumDataLossHours": null,
+    "maximumRecoveryHours": null
+  },
+  "destination": {
+    "provider": null,
+    "container": null,
+    "pathPrefix": null,
+    "independentOfProductionProject": null,
+    "encryptionKeySecretRef": null,
+    "versioningEnabled": null
+  },
+  "retention": {
+    "dailyRecoverySets": null,
+    "weeklyRecoverySets": null,
+    "lifecyclePolicyReference": null,
+    "minimumKnownGoodSets": null
+  },
+  "restoreDrill": {
+    "scheduleExpression": null,
+    "isolatedTargetReference": null,
+    "operatorOwner": null
+  },
+  "alerts": {
+    "owner": null,
+    "destinationReference": null
+  }
+}

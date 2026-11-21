@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { renderOcrStatusBadge } from "./file-manager/ocr-status";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -128,13 +129,7 @@ type FolderState = {
 
 type DocumentsNewTableRow = FormTableRow & Record<string, unknown>;
 
-type OcrStatusMeta = {
-	icon: typeof CheckCircle2;
-	label: string;
-	shortLabel: string;
-	tooltip: string;
-	toneClassName: string;
-};
+
 
 type PdfViewport = {
 	width: number;
@@ -356,93 +351,9 @@ function isPdfItem(item: FileSystemItem) {
 	return item.mimetype === "application/pdf" || getFileExtension(item.name) === "pdf";
 }
 
-function getOcrStatusMeta(item: FileSystemItem): OcrStatusMeta | null {
-	if (item.type !== "file" || !item.ocrDocumentStatus) return null;
 
-	const rowsExtracted =
-		typeof item.ocrRowsExtracted === "number" && Number.isFinite(item.ocrRowsExtracted)
-			? item.ocrRowsExtracted
-			: null;
 
-	switch (item.ocrDocumentStatus) {
-		case "completed":
-			if (rowsExtracted !== null && rowsExtracted <= 0) {
-				return {
-					icon: AlertCircle,
-					label: "Sin datos extraidos",
-					shortLabel: "Sin datos",
-					tooltip: "La extraccion termino pero no se encontraron datos.",
-					toneClassName: "border-rose-300 bg-rose-50 text-rose-800 shadow-[0_8px_18px_rgba(225,29,72,0.14)]",
-				};
-			}
-			return {
-				icon: CheckCircle2,
-				label: rowsExtracted && rowsExtracted > 0 ? `${rowsExtracted} dato${rowsExtracted === 1 ? "" : "s"} extraidos` : "Datos extraidos",
-				shortLabel: "Extraido",
-				tooltip:
-					rowsExtracted && rowsExtracted > 0
-						? `Extraccion completada con ${rowsExtracted} dato${rowsExtracted === 1 ? "" : "s"} detectados.`
-						: "Extraccion completada correctamente.",
-				toneClassName: "border-emerald-300 bg-emerald-50 text-emerald-800 shadow-[0_8px_18px_rgba(5,150,105,0.14)]",
-			};
-		case "failed":
-			return {
-				icon: AlertCircle,
-				label: item.ocrErrorCode === "LINEAGE_RECONCILIATION_CONFLICT" ? "Conflicto de lineage" : "Error de OCR",
-				shortLabel: item.ocrErrorCode === "LINEAGE_RECONCILIATION_CONFLICT" ? "Conflicto" : "Error OCR",
-				tooltip: item.ocrDocumentError?.trim() || "La extraccion fallo y no se pudieron obtener datos.",
-				toneClassName: "border-rose-300 bg-rose-50 text-rose-800 shadow-[0_8px_18px_rgba(225,29,72,0.14)]",
-			};
-		case "processing":
-			return {
-				icon: Loader2,
-				label: "Extrayendo datos",
-				shortLabel: "Procesando",
-				tooltip: "La extraccion OCR esta en proceso.",
-				toneClassName: "border-sky-300 bg-sky-50 text-sky-800 shadow-[0_8px_18px_rgba(14,165,233,0.14)]",
-			};
-		case "pending":
-			return {
-				icon: Clock,
-				label: "Pendiente de OCR",
-				shortLabel: "Pendiente",
-				tooltip: "El documento esta esperando procesamiento OCR.",
-				toneClassName: "border-amber-300 bg-amber-50 text-amber-800 shadow-[0_8px_18px_rgba(245,158,11,0.14)]",
-			};
-		case "unprocessed":
-			return {
-				icon: XIcon,
-				label: "Sin extraer",
-				shortLabel: "Sin OCR",
-				tooltip: "Todavia no se ejecuto la extraccion de datos para este documento.",
-				toneClassName: "border-stone-300 bg-white text-stone-700 shadow-[0_8px_18px_rgba(28,25,23,0.08)]",
-			};
-		default:
-			return null;
-	}
-}
 
-function renderOcrStatusBadge(item: FileSystemItem) {
-	const meta = getOcrStatusMeta(item);
-	if (!meta) return null;
-
-	const Icon = meta.icon;
-	const className = cn(
-		"inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] backdrop-blur-sm",
-		meta.toneClassName,
-	);
-
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<span className={className} aria-label={meta.label}>
-					<Icon className={cn("size-3.5 shrink-0", meta.icon === Loader2 && "animate-spin")} />
-				</span>
-			</TooltipTrigger>
-			<TooltipContent>{meta.tooltip}</TooltipContent>
-		</Tooltip>
-	);
-}
 
 function mapDataTypeToCellType(dataType: string | undefined): CellType {
 	switch (dataType) {
@@ -1966,7 +1877,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 								data-wizard-target="documents-view-mode-cards"
 								variant={documentViewMode === "cards" ? "default" : "ghost"}
 								size="sm"
-								className="h-8 min-w-[5.75rem] justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none"
+								className="h-8 min-w-[5.75rem] justify-center gap-1.5 px-2.5 text-sm leading-none"
 								aria-pressed={documentViewMode === "cards"}
 								onClick={() => setDocumentViewMode("cards")}
 							>
@@ -1978,7 +1889,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 								data-wizard-target="documents-view-mode-table"
 								variant={documentViewMode === "table" ? "default" : "ghost"}
 								size="sm"
-								className="h-8 min-w-[5.75rem] justify-center gap-1.5 rounded-md px-2.5 text-sm leading-none"
+								className="h-8 min-w-[5.75rem] justify-center gap-1.5 px-2.5 text-sm leading-none"
 								aria-pressed={documentViewMode === "table"}
 								onClick={() => setDocumentViewMode("table")}
 							>

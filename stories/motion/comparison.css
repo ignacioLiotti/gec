@@ -1,0 +1,86 @@
+.motion-lab { container: motion-lab / inline-size; max-width: 1440px; margin-inline: auto; color: var(--foreground); }
+.motion-lab-intro { max-width: 850px; margin-block: 12px 28px; }
+.motion-lab-eyebrow { color: var(--muted-foreground); font-size: 11px; letter-spacing: .08em; }
+.motion-lab h1 { font-size: clamp(24px, 3vw, 34px); font-weight: 600; line-height: 1.2; letter-spacing: -.035em; margin-block: 12px; }
+.motion-lab-intro > p, .motion-lab-instruction { font-size: 13px; line-height: 1.7; color: var(--muted-foreground); }
+.motion-lab-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.motion-lab-workbench { padding: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+.motion-lab-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.motion-lab-heading h2 { font-size: 18px; font-weight: 600; line-height: 1.5; scroll-margin-top: 20px; }
+.motion-lab-heading > a { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.motion-lab-heading > span { color: var(--muted-foreground); font-size: 12px; }
+.motion-lab-instruction { margin-top: 8px; max-width: 900px; }
+.motion-lab-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding-block: 18px; }
+.motion-lab-controls label { display: grid; gap: 6px; font-size: 11px; min-width: 0; max-width: 100%; }
+.motion-lab-controls select { max-width: 100%; }
+.motion-lab-controls label > span { display: inline-flex; align-items: center; gap: 6px; }
+.motion-lab-search { flex: 1; }
+.motion-lab-comparison { display: grid; gap: 16px; }
+.motion-lab-sample { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.motion-lab-sample > header { background: var(--secondary); padding: 12px 16px; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
+.motion-lab-sample h3 { font-size: 12px; font-weight: 600; }
+.motion-lab-sample > header > span { display: block; font-size: 11px; color: var(--muted-foreground); margin-top: 3px; }
+.motion-lab-stage { min-height: 270px; display: grid; align-items: center; padding: 24px 16px; overflow-x: auto; }
+.motion-reference { min-width: 0; width: 100%; font-family: var(--font-sans); color: var(--foreground); font-size: 13px; line-height: 1.5; }
+.motion-reference-portal { width: auto; }
+.motion-lab-workbench[data-example="interior-popover"] .motion-lab-stage > .motion-reference { height: 240px; }
+.motion-lab-note { font-size: 11px; color: var(--muted-foreground); line-height: 1.7; margin-top: 16px; }
+.motion-lab-catalog { margin-top: 32px; }
+.motion-lab-catalog > [data-slot] { flex-wrap: wrap; }
+.motion-lab-index { display: grid; gap: 10px; margin-block: 16px 28px; }
+.motion-lab-entry { display: flex; flex-direction: column; align-items: start; gap: 7px; text-align: left; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); cursor: pointer; }
+.motion-lab-entry:hover { background: var(--accent); }
+.motion-lab-entry[aria-pressed="true"] { border-color: var(--primary); box-shadow: inset 3px 0 var(--primary); }
+.motion-lab-entry > strong { font-size: 13px; font-weight: 600; }
+.motion-lab-entry > span, .motion-lab-entry > small { color: var(--muted-foreground); font-size: 11px; }
+.motion-lab-entry:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@container motion-lab (min-width: 640px) { .motion-lab-index { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container motion-lab (min-width: 1040px) {
+  .motion-lab-comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .motion-lab-index { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Paint follows Sintesis. Source dimensions and animated properties stay local. */
+.motion-reference {
+  /* Beautiful's @theme is intentionally not global. Retain its exact easing
+     variables here, since component CSS uses them inside animation shorthands. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-link: cubic-bezier(0.16, 1, 0.3, 1);
+  --grid-line: color-mix(in srgb, var(--border) 78%, transparent);
+  --stripe: color-mix(in srgb, var(--foreground) 7.5%, transparent);
+  --stripe-bg: var(--muted);
+  --tooltip-bg: var(--foreground);
+  --tooltip-fg: var(--background);
+  --tooltip-muted: color-mix(in srgb, var(--background) 75%, var(--foreground));
+  --tooltip-border: var(--border);
+  --shadow-inset-field: var(--shadow-recessed);
+  --shadow-btn: var(--shadow-raised);
+  --shadow-hairline: 0 0 0 1px var(--border);
+  --shadow-overlay: var(--shadow-modal);
+  --shadow-float: var(--shadow-modal);
+  --shadow-lift: var(--shadow-card);
+  --shadow-well: var(--shadow-recessed);
+  --shadow-cap: var(--shadow-raised);
+  --shadow-row: var(--shadow-card);
+}
+.motion-reference .shadow-btn { box-shadow: var(--shadow-raised); }
+.motion-reference .shadow-hairline { box-shadow: 0 0 0 1px var(--border); }
+.motion-reference .shadow-overlay { box-shadow: var(--shadow-modal); }
+.motion-reference .rounded-chip { border-radius: calc(var(--radius) - 2px); }
+.motion-reference .rounded-control, .motion-reference .rounded-card { border-radius: var(--radius); }
+.motion-reference .motion-sintesis-loading:active { translate: none; }
+.motion-reference [class*="rounded-[9px]"], .motion-reference [class*="rounded-[8px]"] { border-radius: var(--radius); }
+
+/* Beautiful uses CSS; Interior uses the reduced-motion hook. Stop CSS loops
+   while retaining state changes and the final styles of entrance animations. */
+.motion-reference[data-reduced="true"] *, .motion-reference[data-reduced="true"] *::before, .motion-reference[data-reduced="true"] *::after {
+  animation-duration: .001ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+}
+.motion-reference[data-reduced="true"] button:active { scale: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .motion-reference *, .motion-reference *::before, .motion-reference *::after { animation-duration: .001ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; }
+}

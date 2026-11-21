@@ -1,0 +1,102 @@
+.motion-reference[data-library="interior"] html.dark {
+  color-scheme: dark;
+}
+.motion-reference[data-library="interior"] .mat-panel {
+  background: var(--mr-panel);
+  box-shadow: var(--shadow-lift);
+}
+.motion-reference[data-library="interior"] .mat-float {
+  background: var(--mr-panel);
+  box-shadow: var(--shadow-float);
+}
+.motion-reference[data-library="interior"] .mat-well {
+  background: var(--mr-well);
+  box-shadow: var(--shadow-well);
+}
+.motion-reference[data-library="interior"] .mat-cap {
+  background: var(--mr-panel);
+  box-shadow: var(--shadow-cap);
+}
+.motion-reference[data-library="interior"] .mat-row {
+  background: var(--mr-well);
+  box-shadow: var(--shadow-row);
+}
+.motion-reference[data-library="interior"] .meta {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.motion-reference[data-library="interior"] .tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.motion-reference[data-library="interior"] .fade-y {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 14px,
+    black calc(100% - 22px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 14px,
+    black calc(100% - 22px),
+    transparent
+  );
+}
+
+.motion-reference[data-library="interior"] .no-bar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.motion-reference[data-library="interior"] .no-bar {
+  scrollbar-width: none;
+}
+.motion-reference[data-library="interior"] .scroll-inset::-webkit-scrollbar-track {
+  margin-block: 20px;
+}
+@supports (-moz-appearance: none) {
+}
+
+.motion-reference[data-library="interior"] .press {
+  transition:
+    transform 0.12s cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 0.15s ease;
+}
+.motion-reference[data-library="interior"] .press:active {
+  transform: translateY(1px);
+}
+
+.motion-reference[data-library="interior"] .shiki,
+.motion-reference[data-library="interior"] .shiki span {
+  color: var(--shiki-light);
+  background-color: transparent !important;
+}
+
+.motion-reference[data-library="interior"] html.dark .shiki,
+.motion-reference[data-library="interior"] html.dark .shiki span {
+  color: var(--shiki-dark);
+}
+
+.motion-reference[data-library="interior"] .shiki code {
+  display: block;
+  width: fit-content;
+  min-width: 100%;
+}
+
+.motion-reference[data-library="interior"] .shiki .line {
+  display: inline-block;
+  width: 100%;
+  padding-inline: 18px;
+}
+@layer base {
+}
+
+@media (prefers-reduced-motion: reduce) {
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AppBrand } from "@/components/app-brand";
 import {
 	Bell,
 	BarChart3,
@@ -190,6 +191,11 @@ const adminItems: NavItem[] = [
 ];
 
 const internalItems: NavItem[] = [
+	{
+		title: "Operaciones",
+		href: "/admin/operations",
+		icon: Waypoints,
+	},
 	{
 		title: "Dashboard admin",
 		href: "/admin/dashboard",
@@ -693,18 +699,7 @@ export function AppSidebar({
 										href="/dashboard"
 										className="flex w-full min-w-0 items-center gap-3 px-2 py-1.5"
 									>
-										<div
-											className={`bg-orange-primary text-sidebar-primary-foreground flex aspect-square items-center justify-center rounded-full transition-[width,height,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isCollapsed ? "size-8 scale-95" : "size-10 scale-100"
-												}`}
-										/>
-										<div className="grid flex-1 text-left text-sm leading-tight transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-[collapsible=icon]:-translate-x-1 group-data-[collapsible=icon]:opacity-0">
-											<span className="truncate font-mono text-lg font-semibold leading-[16px]">
-												Síntesis
-											</span>
-											<span className="truncate text-xs">
-												Plataforma de gestión
-											</span>
-										</div>
+										<AppBrand collapsed={isCollapsed} />
 									</SidebarPrefetchLink>
 								</SidebarMenuButton>
 							</div>

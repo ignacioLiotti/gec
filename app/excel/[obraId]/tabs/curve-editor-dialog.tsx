@@ -955,12 +955,9 @@ function CurveEditorOptionCard({
 				>
 					<Icon className="size-5" />
 				</div>
-				<Badge
-					variant="outline"
-					className={cn(
-						"rounded-full border-stone-200 bg-white text-[11px] font-medium text-stone-600",
-						selected && "border-[#f6b37d] bg-[#fff7f1] text-[#9a4b17]",
-					)}
+				<Badge shape="pill"
+					variant={(selected) ? ("default") : ("neutral")}
+					className={"text-[11px] font-medium"}
 				>
 					{tableName}
 				</Badge>
@@ -1044,11 +1041,11 @@ function CurveEditorWorkspace({
 				<section className="flex min-h-[300px] flex-col rounded-2xl border border-stone-200 bg-white">
 					<div className="border-b border-stone-100 px-5 py-4">
 						<div className="flex flex-wrap items-center gap-2">
-							<Badge variant="outline" className="rounded-full border-stone-200 bg-stone-50 text-stone-700">
+							<Badge shape="pill" variant={"neutral"} >
 								{tableName}
 							</Badge>
 							<span className="text-xs text-stone-400">vs</span>
-							<Badge variant="outline" className="rounded-full border-stone-200 bg-stone-50 text-stone-700">
+							<Badge shape="pill" variant={"neutral"} >
 								{comparedAgainstName}
 							</Badge>
 						</div>
@@ -1068,10 +1065,10 @@ function CurveEditorWorkspace({
 				<section className="flex min-h-[300px] flex-col rounded-2xl border border-stone-200 bg-white">
 					<div className="border-b border-stone-100 px-5 py-4">
 						<div className="flex flex-wrap items-center gap-2">
-							<Badge className="rounded-full border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50">
+							<Badge variant={"info"} shape="pill" >
 								X: {fieldMatch.xLabel}
 							</Badge>
-							<Badge className="rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50">
+							<Badge variant={"warning"} shape="pill" >
 								Y: {fieldMatch.yLabel}
 							</Badge>
 						</div>
@@ -1388,7 +1385,7 @@ export function CurveEditorDialog({
 			</Button>
 
 			<Dialog open={open} onOpenChange={handleOpenChange}>
-				<DialogContent className="flex max-h-[92vh] w-[96vw] max-w-[1460px] flex-col overflow-hidden rounded-[28px] border-stone-200 bg-background p-0 rounded-md">
+				<DialogContent className="flex max-h-[92vh] w-[96vw] max-w-[1460px] flex-col overflow-hidden p-0">
 					<DialogTitle className="sr-only">
 						{step === "choose" ? "Modificar curva de avance" : activeMeta?.title ?? "Editor de curva"}
 					</DialogTitle>
@@ -1436,7 +1433,7 @@ export function CurveEditorDialog({
 										type="button"
 										variant="ghost"
 										size="sm"
-										className="text-stone-500"
+
 										onClick={() => handleOpenChange(false)}
 									>
 										Cancelar
@@ -1468,7 +1465,7 @@ export function CurveEditorDialog({
 									type="button"
 									variant="ghost"
 									size="sm"
-									className="gap-2 text-stone-500 hover:text-stone-900 absolute top-4 left-4"
+									className="gap-2 absolute top-4 left-4"
 									onClick={() => setStep("choose")}
 								>
 									<ArrowLeft className="size-4" />

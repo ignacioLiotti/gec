@@ -467,6 +467,9 @@ export async function POST(request: Request) {
 	const { supabase, user, tenantId } = await getAuthContext();
 	if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	if (!tenantId) return NextResponse.json({ error: "No tenant" }, { status: 400 });
+	const permission = await supabase.rpc("has_permission", { tenant: tenantId, perm_key: "insurance-policies:manage" });
+	if (permission.error) return NextResponse.json({ error: "No se pudo verificar el permiso" }, { status: 500 });
+	if (permission.data !== true) return NextResponse.json({ error: "No tienes permiso para importar polizas" }, { status: 403 });
 
 	const contentType = request.headers.get("content-type") ?? "";
 	const { data: obras, error: obrasError } = await supabase

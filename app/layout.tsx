@@ -336,7 +336,10 @@ export default async function RootLayout({
 						<AuthController />
 						<AuthGate allowAnonymous={access.actorType === "demo"} />
 						<Toaster position="bottom-right" richColors />
-						<NotificationsListener />
+						<NotificationsListener
+							activeTenantId={userRoles.tenantId}
+							userId={user?.id ?? null}
+						/>
 						<PathnameLayoutShell
 							user={user}
 							userRoles={userRoles}

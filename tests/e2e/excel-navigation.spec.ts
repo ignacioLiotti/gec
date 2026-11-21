@@ -1,8 +1,10 @@
-import { expect, test } from "@playwright/test";
-import { ensureNavigationObra } from "./helpers/obras";
+import { expect, test } from "./fixtures/test";
+import { buildExcelObraName, createObraViaBulkApi } from "./helpers/obras";
 
-test("navigates from /excel to /excel/[obraId]", async ({ page, request }) => {
-	const obra = await ensureNavigationObra(request);
+test("navigates from /excel to /excel/[obraId]", async ({ page, request, scenario }) => {
+	const obra = await createObraViaBulkApi(request, {
+		designacionYUbicacion: buildExcelObraName(`${scenario.namespace} Navigation`),
+	});
 	await page.setViewportSize({ width: 390, height: 844 });
 
 	await page.goto("/excel");

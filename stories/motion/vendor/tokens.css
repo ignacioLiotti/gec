@@ -1,0 +1,32 @@
+.motion-reference {
+  --mr-ink: var(--foreground);
+  --mr-ink-2: var(--muted-foreground);
+  --mr-ink-3: var(--muted-foreground);
+  --mr-surface: var(--card);
+  --mr-canvas: var(--background);
+  --mr-page: var(--background);
+  --mr-inset: var(--muted);
+  --mr-hover: var(--accent);
+  --mr-hover-2: var(--muted);
+  --mr-line: var(--border);
+  --mr-line-strong: var(--input);
+  --mr-line-soft: var(--border);
+  --mr-field: var(--muted);
+  --mr-accent: var(--primary);
+  --mr-accent-ink: var(--primary);
+  --mr-accent-tint: var(--muted);
+  --mr-green: hsl(var(--success));
+  --mr-green-tint: color-mix(in srgb, hsl(var(--success)) 12%, var(--card));
+  --mr-red: var(--destructive);
+  --mr-red-tint: color-mix(in srgb, var(--destructive) 12%, var(--card));
+  --mr-orange: hsl(var(--warning));
+  --mr-orange-tint: color-mix(in srgb, hsl(var(--warning)) 12%, var(--card));
+  --mr-bezel: var(--background);
+  --mr-panel: var(--card);
+  --mr-well: var(--muted);
+  --mr-sub: var(--muted);
+  --mr-hairline: var(--border);
+  --mr-hairline-strong: var(--input);
+  --mr-moss: hsl(var(--success));
+  --mr-flag: var(--destructive);
+}

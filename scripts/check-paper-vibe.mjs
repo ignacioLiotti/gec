@@ -1,0 +1,34 @@
+import { chromium, expect } from '@playwright/test';
+import puppeteer from 'puppeteer';
+const browser = await chromium.launch({ executablePath: puppeteer.executablePath(), headless: true });
+try {
+ const page = await browser.newPage({ viewport: { width: 1600, height: 1150 } });
+ const errors = []; page.on('pageerror', e => errors.push(e.message));
+ await page.goto('http://localhost:6006/iframe.html?id=vibe-papel-y-luz--playground&viewMode=story');
+ await expect(page.getByRole('heading', {name:'Papel, capas y luz.'})).toBeVisible();
+ await page.screenshot({path:'.codex-tmp/paper-vibe-light.png',fullPage:true});
+ await page.getByRole('button',{name:'Completar datos de una factura',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Completar datos de una factura'})).toBeVisible();
+ await page.getByRole('button',{name:'Confirmar revisión',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Verificado',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Verificados',exact:true}).click();
+ await expect(page.locator('.paper-documents tbody tr')).toHaveCount(1);
+ await page.getByRole('button',{name:'Mostrar todo',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Revisar póliza de caución',exact:true})).toBeVisible();
+ await page.getByRole('radio',{name:/Número/}).check();
+ await page.getByRole('button',{name:'Crear campo'}).click();
+ await expect(page.getByRole('status')).toContainText('creado en la demo');
+ await page.getByRole('button',{name:'Semana 3: 28 millones',exact:true}).focus();
+ await expect(page.locator('.paper-gloss-tooltip')).toContainText('SEMANA 3');
+ await page.getByLabel('Intensidad del relieve').selectOption('high');
+ await expect(page.locator('.paper-demo')).toHaveAttribute('data-depth','high');
+ await page.getByRole('button',{name:'Usar tema oscuro',exact:true}).click();
+ await page.screenshot({path:'.codex-tmp/paper-vibe-dark.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:'.codex-tmp/paper-vibe-mobile.png',fullPage:true});
+ await page.emulateMedia({ reducedMotion:'reduce' });
+ expect(await page.locator('.paper-gloss-tooltip').evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
+ expect(errors).toEqual([]);
+ console.log(JSON.stringify({interactions:'passed',desktopThemes:2,mobile:'passed',reducedMotion:'passed',errors}));
+} finally { await browser.close(); }

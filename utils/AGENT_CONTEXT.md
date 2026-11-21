@@ -8,6 +8,7 @@ Low-level runtime utilities: Supabase client factories and timezone-safe date he
 
 - `supabase/server.ts` — server-side Supabase client (`createClient()`), cookie-bound; the standard way to authenticate in server components and API routes (`supabase.auth.getUser()`).
 - `supabase/client.ts` — browser client (`createSupabaseBrowserClient()`); used by client components and hooks.
+- In development on HTTPS Cloudflare quick-tunnel hosts, a loopback browser connection uses the local sharing bridge while preserving the server auth-cookie namespace. See ADR 0040 and `plans/2026-10-17-platform-telemetry/share-sintesis.mjs`; production and remote gateways retain their configured URLs.
 - `supabase/admin.ts` — **service-role client. Bypasses RLS.** Only for routes/jobs whose purpose makes the bypass explicit; callers must re-verify tenant scope themselves.
 - `supabase/fetch.ts` — fetch wrapper used by the clients.
 - `date.ts` — `parseLocalDate` / `formatLocalDate`: parse and format `YYYY-MM-DD` strings as **local** dates to avoid the UTC-midnight off-by-one-day bug (relevant for GMT-3 Argentina users). Always use these for date-only values instead of `new Date(str)`.

@@ -10,6 +10,15 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
 	allowedDevOrigins: ["127.0.0.1", "localhost"],
+	webpack(config) {
+		// PDF.js's unminified webpack exports collide with webpack's eval wrappers.
+		config.resolve.alias = {
+			...config.resolve.alias,
+			"pdfjs-dist$": path.join(projectRoot, "node_modules/pdfjs-dist/build/pdf.min.mjs"),
+			"pdfjs-dist/legacy/build/pdf.mjs$": path.join(projectRoot, "node_modules/pdfjs-dist/legacy/build/pdf.min.mjs"),
+		};
+		return config;
+	},
 	turbopack: {
 		root: projectRoot,
 	},

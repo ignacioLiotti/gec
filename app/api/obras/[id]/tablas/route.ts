@@ -124,21 +124,14 @@ export async function GET(_req: Request, context: RouteContext) {
 		}
 
 		const rowCounts = new Map<string, number>();
-		if (tablaIds.length > 0) {
-			const { data: countsData, error: countsError } = await supabase
+		await Promise.all(tablaIds.map(async (tablaId) => {
+			const { count, error } = await supabase
 				.from("obra_tabla_rows")
-				.select("tabla_id, row_count:count(id)", { group: "tabla_id" } as any)
-				.in("tabla_id", tablaIds);
-			if (!countsError) {
-				const groupedCounts =
-					(countsData as unknown as
-						| { tabla_id: string; row_count: number }[]
-						| null) ?? [];
-				for (const entry of groupedCounts) {
-					rowCounts.set(entry.tabla_id, Number(entry.row_count ?? 0));
-				}
-			}
-		}
+				.select("id", { count: "exact", head: true })
+				.eq("tabla_id", tablaId);
+			if (error) throw error;
+			rowCounts.set(tablaId, count ?? 0);
+		}));
 
 		const result = (tablas ?? []).map((tabla) => {
 			const tablaId = tabla.id as string;

@@ -364,32 +364,32 @@ export default async function NotificationsIndexPage() {
       subtitle: "Últimos 7 días",
       value: totalPendientes,
       delta: getDeltaPct(currentPendientes7, prevPendientes7),
-      positiveColor: "bg-cyan-100 text-cyan-700",
-      negativeColor: "bg-rose-100 text-rose-700",
+      positiveVariant: "info",
+      negativeVariant: "destructive",
     },
     {
       title: "Completados",
       subtitle: "Últimos 7 días",
       value: totalCompletados,
       delta: getDeltaPct(currentCompletados7, prevCompletados7),
-      positiveColor: "bg-emerald-100 text-emerald-700",
-      negativeColor: "bg-rose-100 text-rose-700",
+      positiveVariant: "success",
+      negativeVariant: "destructive",
     },
     {
       title: "Vencidos",
       subtitle: "Últimos 7 días",
       value: totalVencidos,
       delta: getDeltaPct(currentVencidos7, prevVencidos7),
-      positiveColor: "bg-rose-100 text-rose-700",
-      negativeColor: "bg-emerald-100 text-emerald-700",
+      positiveVariant: "destructive",
+      negativeVariant: "success",
     },
     {
       title: "Próximos eventos",
       subtitle: "Próximos 7 días",
       value: proximosEventosAll.length,
       delta: getDeltaPct(currentProximos7, prevProximos7),
-      positiveColor: "bg-cyan-100 text-cyan-700",
-      negativeColor: "bg-zinc-100 text-zinc-700",
+      positiveVariant: "info",
+      negativeVariant: "neutral",
     },
   ] as const;
   const proximosEventos = proximosEventosAll.slice(0, 3);
@@ -575,12 +575,12 @@ export default async function NotificationsIndexPage() {
         <div className="no-scrollbar flex w-full gap-3 overflow-x-auto border-none bg-transparent flex-row shadow-[0_20px_60px_rgba(15,23,42,0.06)]" >
           {metrics.map((metric) => {
             const isPositive = metric.delta >= 0;
-            const badgeClass = isPositive ? metric.positiveColor : metric.negativeColor;
+            const badgeVariant = isPositive ? metric.positiveVariant : metric.negativeVariant;
             const deltaPrefix = metric.delta > 0 ? "+" : "";
             return (
               <Card
                 key={metric.title}
-                className="min-w-[220px] flex-1 rounded-2xl border border-zinc-200 bg-white shadow-none gap-0 sm:min-w-[250px]"
+                className="min-w-[220px] flex-1 gap-0 sm:min-w-[250px]"
               >
                 <CardHeader className="space-y-0 pb-2">
                   <div className="flex items-center justify-between">
@@ -596,7 +596,7 @@ export default async function NotificationsIndexPage() {
                     </p>
                     {metric.title !== "Próximos eventos" && (
                       <div className="mb-1 flex items-center gap-1.5">
-                        <Badge className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
+                        <Badge variant={badgeVariant} shape="pill" size="xs">
                           {`${deltaPrefix}${metric.delta}%`}
                         </Badge>
                         <span className="text-[10px] text-zinc-400">vs 7d prev.</span>

@@ -146,11 +146,11 @@ function WorkFilterCombobox({
         <Button
           id="history-work-filter"
           type="button"
-          variant="outline"
+          variant="field"
           role="combobox"
           aria-controls={listId}
           aria-expanded={open}
-          className="h-10 w-full min-w-0 justify-between rounded-md border-stroke bg-surface px-3 text-sm font-medium"
+          className="h-10 w-full min-w-0 justify-between px-3 text-sm font-medium"
         >
           <span className="min-w-0 flex-1 truncate text-left">
             {selectedWork?.label ?? "Todas las obras"}
@@ -343,7 +343,7 @@ export function DocumentDraftsPageClient() {
             <Button
               type="button"
               variant="outline"
-              className="rounded-md"
+
               onClick={() => setFilters((current) => ({ ...current }))}
             >
               <RefreshCcw className={cn("mr-2 size-4", loading && "animate-spin")} />
@@ -374,7 +374,7 @@ export function DocumentDraftsPageClient() {
                 value={filters.status}
                 onValueChange={(status) => setFilters((current) => ({ ...current, status }))}
               >
-                <SelectTrigger id="history-status-filter" className="h-10 w-full rounded-md border-stroke bg-surface">
+                <SelectTrigger id="history-status-filter" className="h-10 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent align="start">
@@ -403,7 +403,7 @@ export function DocumentDraftsPageClient() {
                   createdBy: createdBy === "ALL" ? "" : createdBy,
                 }))}
               >
-                <SelectTrigger id="history-creator-filter" className="h-10 w-full rounded-md border-stroke bg-surface">
+                <SelectTrigger id="history-creator-filter" className="h-10 w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent align="start">
@@ -421,7 +421,7 @@ export function DocumentDraftsPageClient() {
                 type="date"
                 value={filters.from}
                 onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))}
-                className="h-10 border border-stroke bg-surface px-3"
+                className="h-10 px-3"
               />
             </div>
             <div className="grid min-w-0 gap-1.5">
@@ -431,7 +431,7 @@ export function DocumentDraftsPageClient() {
                 type="date"
                 value={filters.to}
                 onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))}
-                className="h-10 border border-stroke bg-surface px-3"
+                className="h-10 px-3"
               />
             </div>
           </div>
@@ -531,14 +531,14 @@ export function DocumentDraftsPageClient() {
 
               <div className="mt-5 flex flex-wrap gap-2">
                 {selectedDocument.canEdit ? (
-                  <Button asChild className="rounded-md">
+                  <Button asChild >
                     <Link href={`/document-generation?generatedId=${encodeURIComponent(selectedDocument.id)}`}>
                       <FilePenLine className="mr-2 size-4" />
                       Editar
                     </Link>
                   </Button>
                 ) : null}
-                <Button asChild variant="outline" className="rounded-md">
+                <Button asChild variant="outline" >
                   <Link href={`/document-generation/review?id=${encodeURIComponent(selectedDocument.id)}`}>
                     Abrir documento
                     <ArrowRight className="ml-2 size-4" />
@@ -547,14 +547,14 @@ export function DocumentDraftsPageClient() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-md"
+
                   disabled={!selectedDocument.storagePath}
                   onClick={() => downloadDocument(selectedDocument)}
                 >
                   <Download className="mr-2 size-4" />
                   Descargar PDF
                 </Button>
-                <Button type="button" variant="outline" className="rounded-md" onClick={() => void copyReviewLink()}>
+                <Button type="button" variant="outline"  onClick={() => void copyReviewLink()}>
                   <Copy className="mr-2 size-4" />
                   Copiar link de revision
                 </Button>
@@ -564,7 +564,7 @@ export function DocumentDraftsPageClient() {
                       <Button
                         type="button"
                         variant="destructiveSecondary"
-                        className="rounded-md"
+
                         disabled={deletingId === selectedDocument.id}
                       >
                         {deletingId === selectedDocument.id ? (

@@ -197,7 +197,7 @@ export function FormTableToolbar({ className }: { className?: string }) {
 							type="search"
 							data-testid="form-table-search"
 							className={cn(
-								"pointer-events-auto w-[360px] bg-surface pl-9 pr-[68px] text-sm font-medium text-content bg-[linear-gradient(to_bottom,rgb(255_255_255/0),rgb(255_255_255/0))]! border border-stroke-soft shadow-[0_1px_0_rgba(255,255,255,1),inset_0_1px_1px_rgba(15,23,22,0.08)] placeholder:text-content-muted focus-visible:ring-2 focus-visible:ring-orange-primary/20 [&::-webkit-search-cancel-button]:hidden",
+								"pointer-events-auto w-[360px] pl-9 pr-[68px] text-sm font-medium [&::-webkit-search-cancel-button]:hidden",
 								isSpreadsheetChrome
 									? "sm:w-[360px]"
 									: "sm:w-64 md:w-[360px]"
@@ -335,7 +335,7 @@ export function FormTableToolbar({ className }: { className?: string }) {
 									<DropdownMenuSeparator />
 								</>
 							)}
-							<div className="">{columnVisibilityMenu}</div>
+							<div >{columnVisibilityMenu}</div>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem
 								onSelect={(event) => {
@@ -350,7 +350,7 @@ export function FormTableToolbar({ className }: { className?: string }) {
 							{config.toolbarActions && (
 								<>
 									<DropdownMenuSeparator />
-									<div className="">{config.toolbarActions}</div>
+									<div >{config.toolbarActions}</div>
 								</>
 							)}
 						</DropdownMenuContent>
@@ -1563,7 +1563,7 @@ export function FormTablePagination() {
 							>
 								<SelectTrigger
 									className={cn(
-										"h-6 w-[74px] rounded-md  px-3 text-xs font-semibold text-content shadow-recessed hover:bg-surface-muted  [&>svg]:size-3.5 [&>svg]:text-content-muted",
+										"h-6 w-[74px] px-3 text-xs font-semibold [&>svg]:size-3.5",
 										isLoading && "opacity-50"
 									)}
 								>
@@ -2925,7 +2925,7 @@ export function FormTable<Row extends FormTableRow, Filters>({
 			return {
 				className: cn(
 					baseClassName,
-					pinned && offset !== undefined ? "sticky z-20 shadow-[1px_0_0_0_hsl(var(--border))]" : ""
+					pinned && offset !== undefined ? "sticky z-20 shadow-[1px_0_0_0_var(--border)]" : ""
 				),
 				style: {
 					left: pinned && offset !== undefined ? `${stickyLeadingOffset + offset}px` : undefined,

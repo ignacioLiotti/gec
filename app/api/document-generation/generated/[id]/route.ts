@@ -51,19 +51,39 @@ async function reopenPurchaseOrderDraft(params: {
   };
 
   if (params.generatedDocument.source_draft_id) {
-    const { data, error } = await admin
+    const { data: existingDraft, error: existingDraftError } = await admin
       .from("generated_document_drafts")
-      .update({
-        status: "DRAFT",
-        input_data: params.generatedDocument.input_data,
-        validation_errors: [],
-      })
+      .select("id, input_data, updated_at")
       .eq("id", params.generatedDocument.source_draft_id)
       .eq("tenant_id", params.generatedDocument.tenant_id)
-      .select("id")
       .maybeSingle();
-    if (error) throw error;
-    if (data?.id) return String(data.id);
+    if (existingDraftError) throw existingDraftError;
+    if (existingDraft?.id) {
+      const currentInputData =
+        existingDraft.input_data &&
+        typeof existingDraft.input_data === "object" &&
+        !Array.isArray(existingDraft.input_data)
+          ? existingDraft.input_data
+          : {};
+      if (JSON.stringify(currentInputData) !== JSON.stringify(params.generatedDocument.input_data)) {
+        return String(existingDraft.id);
+      }
+
+      const { data, error } = await admin
+        .from("generated_document_drafts")
+        .update({
+          status: "DRAFT",
+          validation_errors: [],
+        })
+        .eq("id", params.generatedDocument.source_draft_id)
+        .eq("tenant_id", params.generatedDocument.tenant_id)
+        .eq("updated_at", String(existingDraft.updated_at ?? ""))
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (data?.id) return String(data.id);
+      return String(existingDraft.id);
+    }
   }
 
   const { data: draft, error: draftError } = await admin

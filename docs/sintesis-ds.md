@@ -21,50 +21,25 @@ Antes de tocar código, recorrer esta lista:
 
 ## 2. Colores
 
-### Tokens CSS
+### Tokens vigentes
 
-```css
-/* Fondo y superficies */
---background   oklch(0.975 0 106)   /* off-white cálido — página */
---card         #ffffff              /* blanco puro — cards, paneles */
---muted        oklch(0.905 0 106)   /* stone claro — áreas secundarias */
---secondary    oklch(0.97 0.003 106)/* levemente cálido — hover bg */
---accent       oklch(0.96 0.005 106)/* hover fill en triggers */
+Los valores y ambos temas viven en `design-system/tokens.css`. No copiar esta paleta dentro de pantallas. El naranja interactivo usa `hsl(20 100% 36%)` en claro para mantener contraste con texto blanco; el tema oscuro define su propio par de fondo/texto. El naranja de marca no reemplaza ese par accesible.
 
-/* Texto */
---foreground         oklch(0.145 0 0)  /* stone-900 — texto principal */
---muted-foreground   oklch(0.556 0 0)  /* stone-500 — texto secundario */
---card-foreground    oklch(0.145 0 0)
-
-/* Marca */
---primary      #ff5800   /* naranja — solo para CTAs primarios y accents */
-
-/* Bordes */
---border   oklch(0.17 0.01 0 / 8%)  /* ~8% negro — borde sutil universal */
-
-/* Semáforo de fuentes de datos */
---src-extraction   #16a34a   /* verde */
---src-manual       #2563eb   /* azul */
---src-mixed        #9333ea   /* violeta */
-```
-
-### Paleta stone (usar en Tailwind directamente)
-
-| Clase Tailwind | Hex | Uso típico |
-|---|---|---|
-| `stone-50` | `#fafaf9` | Fondo alterno muy sutil |
-| `stone-100` | `#f5f5f4` | Hover background, tray fill |
-| `stone-200` | `#e7e5e4` | Bordes visibles, separadores |
-| `stone-400` | `#a8a29e` | Placeholders, íconos inactivos |
-| `stone-500` | `#78716c` | Texto muted, labels secundarios |
-| `stone-700` | `#44403c` | Texto cuerpo |
-| `stone-900` | `#1c1917` | Texto fuerte, botón dark, tab activa |
+| Uso | Clases semánticas |
+|---|---|
+| Página | `bg-background text-foreground` |
+| Panel | `bg-card text-card-foreground` |
+| Superficie secundaria | `bg-muted text-muted-foreground` |
+| Bordes | `border-border` |
+| Contenido secundario | `text-content-secondary` |
+| Información / categoría | `Badge variant="info"` / `variant="category"` |
+| Acción | `Button variant="default"`, `dark`, `ghost`, etc. |
 
 ### Reglas de color
 
 - **Nunca** `bg-primary` en texto — `--primary` es naranja, no un tono de gris.
 - **Naranja** sólo para: botón CTA principal (`variant="default"`), accents de datos, estados activos destacados.
-- **Negro** (#1a1a1a / stone-900) para: botón primary en UI densa (`variant="dark"`), tab activa top-nav.
+- **Variante dark**, resuelta por el tema, para: botón primary en UI densa (`variant="dark"`), tab activa top-nav.
 - **Hardcoded hex** permitido sólo para: colores de report paper (dominio aparte), colores de gráficos.
 
 ---
@@ -161,7 +136,7 @@ Con `--radius: 0.5rem` en globals.css, el mapeo es:
 
 - **Botón** → `rounded-lg` (definido en `button.tsx`, no override)
 - **Input / Select** → `rounded-lg`
-- **Card estándar** → `rounded-xl border border-stone-200`
+- **Card estándar** → `<Card>`; seleccionar su variante sin redefinir borde o radio localmente.
 - **Dropdown / Popover** → `rounded-xl shadow-lg`
 - **Modal / Dialog** → `rounded-2xl`
 - **Badge / Tag** → `rounded-full`

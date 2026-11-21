@@ -15,6 +15,7 @@ Local Supabase project configuration, SQL migrations, and seed data. Everything 
 
 - Schema, RLS, storage policies, and permissions are ADR-governed. Do not change them without checking `docs/adr/` and `CONTEXT.md` (Migration Run contract, compatibility taxonomy, destructive-approval rules).
 - Migrations are append-only: never edit an applied migration; write a new one.
+- Approved historical exception (2026-10-17): `migrations/0123_role_permission_denies.sql` adds a nullable column prerequisite so fresh databases can reach the unchanged tenant-scoping work in `0125`; `0132` restores the final permission function for databases that already passed `0125`. See the [migration repair plan](../plans/2026-10-17-isolated-integration/migration-repair.md) for the failure evidence and limits of this exception.
 - Every tenant-scoped table needs RLS policies; verify against `docs/obsidian-brain/31 - RLS & Security Policies.md`.
 - `pnpm db:reset` is destructive (local only). `pnpm db:push` / `db:push:remote` are high-impact — confirm intent first.
 

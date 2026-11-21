@@ -111,7 +111,7 @@ export default function ReportingDefaultsPage() {
       </div>
 
       {error ? (
-        <Card className="border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <Card variant={"destructive"} className="p-3 text-sm">
           {error}
         </Card>
       ) : null}

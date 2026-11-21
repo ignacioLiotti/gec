@@ -18,78 +18,47 @@ Health check: `GET /api/health` — simple 200 OK for uptime monitoring.
 
 ---
 
-## Testing Strategy
+## Testing strategy
 
-### Unit Tests (Vitest)
+The target is documented in [Testing the application through its contracts and user journeys](../test-plan/testing-strategy.md). It maps all 40 product workflows to domain contracts, real-component browser workflows, route/local-DB integration and complete customer journeys.
 
-`vitest.config.ts` + `vitest.setup.ts`
+The [2026-10-17 audit](../../plans/2026-10-17-test-strategy/README.md) reviewed every test and runtime-check entry. Its baseline was 38 Vitest files and 233 passing cases. The cleanup retains useful parsing, security, financial and state tests; it replaces circular expected values and shallow output checks, and removes duplicate and CSS-implementation cases. The current runner totals and proof are in the audit verification artifacts.
 
-Location: `tests/lib/` and `tests/components/`
+### Fast domain and boundary checks
 
-**Current unit tests:**
-```
-tests/lib/
-  tablas.test.ts                          — date/number parsing, formula eval
-  spreadsheet-preview-summary.test.ts     — spreadsheet parsing
-  http/validation.test.ts                 — HTTP input validation
-  security/rate-limit.test.ts             — rate limiter logic
-  macro-table-source-selection.test.ts    — macro source resolution
+`npm test` uses Vitest. `vitest.config.ts` currently selects `tests/**/*.test.ts` in a Node environment. Most tests call public domain functions; files under `tests/components` do not mount a React tree merely because of their directory name.
 
-tests/components/
-  form-table/cell-suggestions.test.ts     — autocomplete suggestions
-```
+Use concrete outcomes, independent expected values and meaningful state sequences. A returned byte array does not prove a report contains data. A mock that ignores query predicates does not prove tenant isolation. The audit's controlled MercadoPago mutation showed that a broken signature constructor could pass all 18 original billing cases; the replacement independent fixture rejects it.
 
-**Key tested logic:**
-- `parseFlexibleDateValue()` — handles all date format variants
-- `parseLocalizedNumber()` — European vs US number formats
-- `evaluateTablaFormula()` — formula safety and evaluation
-- `resolveMacroSourceTablas()` — template vs manual source resolution
+### Browser checks
 
-### E2E Tests (Playwright)
+`playwright.config.ts` discovers the authenticated route/API suite under `tests/e2e`. Existing obra create/reload and lineage reimport/override/conflict contracts are useful. Discovery and source review do not establish that those journeys ran successfully.
 
-`playwright.config.ts`
+Storybook and the portfolio guide contain real production components with fixture APIs as well as copied demonstration screens. Label those boundaries. The document-generation runtime mounts the real client under Strict Mode, delays API responses and checks revision preservation, generation content, focus/caret and stale-context handling. It fails on console, page and HTTP resource errors. It does not access a real database, storage or PDF renderer.
 
-Location: `tests/e2e/`
+`portfolio:check` runs the retained interaction/journey validators. The redundant broad screenshot smoke is available as `portfolio:capture`; artifact capture does not count as a separate user-journey test. Manual design-demo validators remain outside product coverage.
 
-**Setup:**
-- `tests/e2e/auth.setup.ts` — authenticates test user, stores auth state
-- `tests/e2e/helpers/auth.ts` — auth helpers
-- `tests/e2e/helpers/obras.ts` — obra creation/cleanup helpers
+### Local integration execution
 
-**Test suites:**
-```
-tests/e2e/
-  excel-navigation.spec.ts    — navigate between obra tabs
-  excel/
-    api/obras-api.spec.ts     — API endpoint tests
-    ui/page.spec.ts           — UI smoke tests for excel view
+Test discovery needs no credentials or server:
+
+```text
+npm exec playwright test -- --list
 ```
 
-**Test patterns:**
-- API tests: direct HTTP requests to API routes
-- UI tests: browser automation, full user flow
-- Auth: Playwright's built-in auth state storage (avoids re-login per test)
+`npm run test:e2e` creates an owned temporary app and Supabase project with generated local configuration. `npm run test:e2e:public` starts only the temporary app. The runner excludes `.env*`, ordinary seeds and external auth, preserves the production proxy/instrumentation, and records per-run reports. Direct execution needs the matching run manifest. See [ADR 0039](../adr/0039-owned-local-integration-fixtures.md), which replaces manual environment selection from ADR 0038.
 
----
+The shared auth file and fixed tenant/user helpers were removed. Each test attempt owns two tenants and lazy synthetic actors with real SSR sessions. Specs verify business behavior through actor requests and anon-key RLS clients; administrator observers are limited to setup and lifecycle checks. Cleanup verifies contexts, Auth, profiles and Storage. Product soft-delete triggers retain SQL rows, so their durable manifests remain `awaiting-stack-disposal` until the runner verifies removal of the owned containers, volumes and network, plus the app process, port and snapshot. Marking a scope `disposed` preserves its runtime-cleanup errors. Actual proof remains separate from source review and discovery; current results are in the [integration implementation](../../plans/2026-10-17-isolated-integration/README.md).
 
-## Test Data
+### CI and current gaps
 
-Tests use a dedicated test tenant + test user. Obras created in tests are cleaned up after.
+No CI definition was discovered under `.github/workflows` during this audit. An external CI service may exist; this repository does not establish its gates. Proposed PR, merge, nightly and provider-sandbox gates are in the target strategy.
 
-`tests/e2e/helpers/obras.ts`:
-```typescript
-createTestObra(page) → creates obra, returns { id, cleanup }
-```
+The largest missing integration proofs are tenant/permission enforcement, onboarding and invitations, document storage/OCR/report lifecycle, review/approval/PDF generation, scheduled automation/idempotency, and persisted billing transitions. Existing unit/helper tests remain useful but do not fill those gaps.
 
----
-
-## CI/CD
-
-Tests run via GitHub Actions (or similar). The existing `test-plan/` in docs defines the manual test protocol.
-
----
-
-## Related Notes
+## Related notes
 
 - [[01 - Architecture Overview]]
 - [[26 - Key Libraries & Utilities]]
+- [Manual obra flow plan](../test-plan/obra-flows.md)
+- [Local test instructions](../../tests/AGENT_CONTEXT.md)

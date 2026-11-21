@@ -1,3 +1,5 @@
+
+import { NativeSelect } from "@/components/ui/native-select";
 import Link from "next/link"
 import { createClient } from "@/utils/supabase/server"
 import { Badge } from "@/components/ui/badge"
@@ -238,35 +240,35 @@ export default async function AuditLogPage({
           <label className="text-xs font-medium text-muted-foreground" htmlFor="table">
             Tabla
           </label>
-          <select
+          <NativeSelect
             id="table"
             name="table"
             defaultValue={tableFilter}
-            className="mt-1 h-9 w-full rounded-md border-2 border-orange-primary/40 bg-transparent px-3 text-sm focus-visible:border-orange-primary focus-visible:ring-orange-primary/30 focus-visible:ring-[3px]"
+            className="mt-1 h-9 w-full border-2 px-3 text-sm"
           >
             {TABLE_FILTERS.map((opt) => (
               <option key={opt.value || "all"} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div>
           <label className="text-xs font-medium text-muted-foreground" htmlFor="action">
             Acción
           </label>
-          <select
+          <NativeSelect
             id="action"
             name="action"
             defaultValue={actionFilter}
-            className="mt-1 h-9 w-full rounded-md border-2 border-orange-primary/40 bg-transparent px-3 text-sm focus-visible:border-orange-primary focus-visible:ring-orange-primary/30 focus-visible:ring-[3px]"
+            className="mt-1 h-9 w-full border-2 px-3 text-sm"
           >
             {ACTION_FILTERS.map((opt) => (
               <option key={opt.value || "all-actions"} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div className="flex items-end justify-end gap-2 lg:col-span-4">
           <label className="mr-auto inline-flex items-center gap-2 text-xs text-muted-foreground">

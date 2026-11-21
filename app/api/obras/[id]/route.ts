@@ -21,6 +21,7 @@ import {
 } from "@/lib/demo-session";
 import { updateInsurancePoliciesForObraCompletion } from "@/lib/insurance-policies";
 import { syncInsurancePoliciesToMacroTable } from "@/lib/insurance-policies-macro";
+import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type RouteContext = {
 	params: Promise<{
@@ -207,7 +208,7 @@ async function handleObraCompletionTransitions({
 
 				try {
 					await updateInsurancePoliciesForObraCompletion({
-						supabase,
+						supabase: createSupabaseAdminClient(),
 						obraId,
 						tenantId,
 						finishedAt: new Date().toISOString().slice(0, 10),
@@ -270,6 +271,25 @@ async function handleObraCompletionTransitions({
 			console.error(
 				"Obras [id] PUT: unexpected error while cleaning up calendar_events/executions",
 				revertError
+			);
+		}
+
+		try {
+			await updateInsurancePoliciesForObraCompletion({
+				supabase: createSupabaseAdminClient(),
+				tenantId,
+				obraId,
+				finishedAt: null,
+			});
+			await syncInsurancePoliciesToMacroTable({
+				supabase,
+				tenantId,
+				obraIds: [obraId],
+			});
+		} catch (insuranceError) {
+			console.error(
+				"Obras [id] PUT: error clearing insurance policy completion dates",
+				insuranceError,
 			);
 		}
 	}

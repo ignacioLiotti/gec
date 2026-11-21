@@ -4,11 +4,17 @@ This is the canonical UI contract for agents working in this repository. Codex, 
 
 The design system is project-local. It lives in `design-system/`, and the app consumes it through `components/ui/*` compatibility wrappers.
 
+## Storybook catalog
+
+Run `npm run storybook` to inspect components, variants, and light/dark themes at `http://localhost:6006`. App UI stories use the same implementations as product screens. Buttons and badges each have one gallery playground with controls for every variant. Patterns covers shared permission, policy, OCR, and nested-menu behavior. See [the catalog guide](../../stories/README.md) and [coverage inventory](../../stories/coverage.md).
+
 ## Import Rules
 
 - In app and feature code, import primitives from `@/components/ui/*`.
 - Do not import directly from `@/design-system/*` in normal app code unless you are editing the design-system layer itself.
 - Do not copy primitive source into routes, pages, or feature folders.
+- For components present in both layers, `components/ui` must remain a reexport of `design-system/components`. Fix the canonical implementation once.
+- Keep primitive `className` overrides for layout, width, placement, truncation, and density. Put color, border color, radius, and shadow changes into shared variants. Run `npm run check:ui` before handing back UI changes.
 - Keep app-only primitives in `components/ui` until they are intentionally promoted into `design-system/components`.
 
 Preferred:
@@ -71,7 +77,8 @@ Keep these app-local for now unless a task explicitly promotes them into the des
 - Use `variant="destructiveSecondary"` for soft destructive actions in dialogs or banners.
 - Use `variant="success"` only for real success/proceed states.
 - Use `variant="link"` for inline text actions.
-- Existing `variant="ghost"` maps to the design-system tile style through the compatibility wrapper. For normal subtle buttons, prefer `outline`, `secondary`, or a future explicit variant instead of adding one-off classes.
+- Use `variant="ghost"` for subtle actions. Use `variant="ghost-tile"` for a tile, with `size="tile"` when explicitly setting its size.
+- Use `variant="field"` for a button that opens a combobox or another form selector. It shares field chrome with Input, Textarea, SelectTrigger, and NativeSelect.
 - Use `ExpandableLightButton` for dense icon-first toolbar actions that should reveal their text label on hover, focus, or open state. Keep the former visible label in the `label` prop for accessibility.
 
 ## Badge Rules
@@ -80,6 +87,21 @@ Keep these app-local for now unless a task explicitly promotes them into the des
 - Use `variant="default"` for primary/brand metadata.
 - Use `variant="success"`, `variant="warning"`, or `variant="destructive"` only when the badge communicates real state.
 - Do not use arbitrary color classes on badges for decoration. Category colors are allowed only when the category meaning is real and consistent.
+- `info` is blue information; `category` is violet user-defined/category metadata. Brand and informational meanings use separate tokens. `shape` and `size` belong on the component props.
+
+## Shared behavior and tokens
+
+- Layer classes z-dropdown, z-sticky, z-overlay, z-modal, z-tooltip and z-toast use Tailwind --z-index-* theme tokens in app/globals.css. Keep landing effects in their local stacking context so portaled dialogs cover them. The --z-* namespace does not generate these utilities.
+
+- Use `lib/insurance-policy-status.ts` for the compact policy state in both the dashboard and obra detail. Coverage expiry takes precedence over a later cancellation date. Use `components/insurance-policy-status.tsx` for its presentation.
+- OCR status presentation belongs to `app/excel/[obraId]/tabs/file-manager/ocr-status.tsx`; preserve the distinct lineage-conflict state.
+- Role assignment and user override controls share `permission-state-control.tsx`. Their persistence and authorization remain with the owning screen.
+- Use `NativeSelect` when a native change event, option list, or FormData contract is required; use `Select` for Radix selection. Do not replace native event contracts with adapters in a styling change.
+- Theme palette definitions live in `design-system/tokens.css`. Full CSS colors such as `--primary`, `--background`, and `--card` use `var(...)`. Channel tokens such as `--surface`, `--success`, and `--orange-primary` use `hsl(var(...))`. The TypeScript token map handles this distinction; do not wrap its values in `hsl()` again.
+- Interactive orange is darker in light mode so small text passes contrast. Dark mode has its own text, solid-status foregrounds, and shadow recipes.
+- Card supports `default`, `flush`, `warning`, and `destructive`. Use `flush` for an existing structural grouping; prefer a plain element when no card semantics or subcomponents are needed.
+
+`check:ui` scans ordinary product controls and their wrappers. It excludes the documented visual domains: report/document output, charts/calendars, viewer and data-flow canvases, landing pages and prototypes. FormTable's cell editors retain their grid-owned focus and selection chrome. The check catches literal and conditional classes; review computed class helpers and inline styles as well.
 
 ## Tooltip Rules
 

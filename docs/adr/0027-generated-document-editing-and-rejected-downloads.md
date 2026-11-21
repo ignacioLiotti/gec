@@ -11,6 +11,11 @@ Why this ADR exists:
 - operators need to correct each other's generated documents without reviewer-only access
 - the lifecycle already treats rejected documents as editable correction targets
 - approved documents sometimes need corrections, but edited content must not retain an approval granted to an earlier version
+
+Enforcement:
+
+- the `generated_documents_update` RLS policy lets a tenant member target an approved row, but its `WITH CHECK` rejects a resulting row that remains `APPROVED` unless the actor has `documents:review`
+- the regeneration API always persists member edits as `UNDER_REVIEW` and treats an empty update result as a failed write instead of returning a partial success
 - rejected PDFs should not keep circulating as downloadable final artifacts
 
 Consequences:

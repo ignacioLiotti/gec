@@ -196,7 +196,7 @@ function DeskStackPreview() {
         <FolderFront
           firstStopColor="#fe9a00"
           secondStopColor="#fb8634"
-          className={cn("w-[105%] z-6 h-full absolute -bottom-2 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300 group-hover:transform-[perspective(800px)_rotateX(-40deg)]")} />
+          className={"w-[105%] z-6 h-full absolute -bottom-2 -left-1 transform origin-[50%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300 group-hover:transform-[perspective(800px)_rotateX(-40deg)]"} />
         <DocumentApprovedSeal status="APPROVED" size="sm" className="absolute bottom-8 left-[1rem] z-[6] scale-[1] shadow-[0_8px_18px_-14px_rgba(5,150,105,0.9)] transform origin-[100%_100%] group-hover:transform-[perspective(800px)_rotateX(-30deg)] transition-transform duration-300 group-hover:transform-[perspective(800px)_rotateX(-40deg)]" />
       </button>
     </div>
@@ -421,35 +421,35 @@ function DocumentPreviewer({
     <div className="flex items-center gap-2 text-sm text-slate-700">
       <Button
         type="button"
-        variant="ghost"
+        variant={"secondary"}
         size="icon-sm"
         onClick={() => updatePreviewZoom(previewZoom - DOCUMENT_PREVIEW_ZOOM_STEP)}
         disabled={!canZoomOut}
         aria-label="Alejar documento"
-        className={cn(VIEWER_CONTROL_BUTTON_CLASS, "h-10 w-10 rounded-full bg-white")}
+        className={cn(VIEWER_CONTROL_BUTTON_CLASS, "h-10 w-10")}
       >
         <ZoomOut />
       </Button>
       <Button
         type="button"
-        variant="ghost"
+        variant={"secondary"}
         size="sm"
         onClick={() => updatePreviewZoom(1)}
         aria-label="Restablecer zoom"
         title="Restablecer zoom"
-        className={cn(VIEWER_CONTROL_BUTTON_CLASS, "h-10 min-w-20 px-3 font-mono rounded-full bg-white")}
+        className={cn(VIEWER_CONTROL_BUTTON_CLASS, "h-10 min-w-20 px-3 font-mono")}
       >
         <RotateCcw />
         {zoomPercent}%
       </Button>
       <Button
         type="button"
-        variant="ghost"
+        variant={"secondary"}
         size="icon-sm"
         onClick={() => updatePreviewZoom(previewZoom + DOCUMENT_PREVIEW_ZOOM_STEP)}
         disabled={!canZoomIn}
         aria-label="Acercar documento"
-        className={cn(VIEWER_CONTROL_BUTTON_CLASS, "h-10 w-10 rounded-full bg-white")}
+        className={cn(VIEWER_CONTROL_BUTTON_CLASS, "h-10 w-10")}
       >
         <ZoomIn />
       </Button>
@@ -470,7 +470,7 @@ function DocumentPreviewer({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[94dvh] !w-[min(1180px,96vw)] !max-w-[min(1180px,96vw)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#f6f7f9] p-0 shadow-[0_30px_90px_rgba(15,23,42,0.28)]"
+        className="flex h-[94dvh] !w-[min(1180px,96vw)] !max-w-[min(1180px,96vw)] flex-col overflow-hidden p-0"
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-[#fbfcfd] px-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -496,13 +496,13 @@ function DocumentPreviewer({
                 size="sm"
                 onClick={() => void downloadDocument()}
                 disabled={isDownloading}
-                className="rounded-md"
+
               >
                 {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
                 {isDownloading ? "Descargando..." : "Descargar"}
               </Button>
             ) : null}
-            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-slate-500">
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} >
               <X className="size-4" />
             </Button>
           </div>
@@ -568,7 +568,7 @@ function DocumentPreviewer({
               onClick={goPrevious}
               disabled={!canGoPrevious}
               aria-label="Documento anterior"
-              className="rounded-full text-slate-600 disabled:text-slate-300 "
+
             >
               <ChevronLeft className="size-4" />
             </Button>
@@ -582,7 +582,7 @@ function DocumentPreviewer({
               onClick={goNext}
               disabled={!canGoNext}
               aria-label="Documento siguiente"
-              className="rounded-full text-slate-600 disabled:text-slate-300"
+
             >
               <ChevronRight className="size-4" />
             </Button>
@@ -656,7 +656,7 @@ function TypeFolder({
   return (
     <section className="rounded-lg border border-[#d7dce2] bg-[#f8fafc]/80 p-3 shadow-[0_20px_38px_-34px_rgba(15,23,42,0.75),inset_0_1px_0_rgba(255,255,255,0.85)] [contain-intrinsic-size:1px_760px] [content-visibility:auto]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#d9dee5] bg-[#f8fafc] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
-        <div className="">
+        <div >
           <p className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#64748b]">
             <ClipboardList className="size-3.5 text-[#ff5800]" />
             Tipo documental
@@ -941,7 +941,7 @@ export function ApprovedDocumentsPageClient() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar por documento, obra o carpeta"
-                  className="h-10 rounded-lg border-[#d7dce2] bg-white pl-9 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] focus-visible:ring-[#ff5800]/20"
+                  className="h-10 pl-9 text-sm"
                 />
               </div>
               <div className="inline-flex w-fit rounded-lg border border-[#d7dce2] bg-[#eef0f2] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
@@ -974,7 +974,7 @@ export function ApprovedDocumentsPageClient() {
             <Button
               type="button"
               variant="secondary"
-              className="h-10 gap-2 self-start rounded-lg border border-[#d7dce2] bg-white text-[#1f2937] shadow-[0_8px_18px_-16px_rgba(15,23,42,0.55),inset_0_1px_0_rgba(255,255,255,0.95)] hover:-translate-y-0.5 hover:bg-[#f8fafc] sm:self-auto"
+              className="h-10 gap-2 self-start hover:-translate-y-0.5 sm:self-auto"
               onClick={() => void approvedDocumentsQuery.refetch()}
               disabled={approvedDocumentsQuery.isFetching}
             >

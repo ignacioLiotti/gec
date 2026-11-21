@@ -79,7 +79,9 @@ Luego, cuando llega webhook con estado definitivo, se actualiza.
 - Resuelve `preapprovalId` desde query/body/resource.
 - Consulta estado real en MP (`GET /preapproval/{id}`).
 - Determina tenant/plan por `external_reference` (`tenant:<id>|plan:<key>`).
-- Upsert de `tenant_subscriptions` con:
+- Comprueba que el ID de preapproval siga asociado al tenant por el checkout. Un evento de una suscripcion anterior o sin asociacion devuelve `202` sin modificar la fila.
+- Actualiza `tenant_subscriptions` filtrando por tenant e ID externo actual. Si otro checkout cambia la asociacion durante la consulta, el evento tampoco modifica la fila.
+- La actualizacion incluye:
   - `status` mapeado (`authorized -> active`, `rejected -> past_due`, etc)
   - `current_period_end` con `next_payment_date`
   - ids externos y metadata.

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "app/**/*.ts", "app/**/*.tsx", "components/**/*.tsx",
+    "design-system/**/*.ts", "design-system/**/*.tsx", "lib/**/*.ts",
+    "mammoth-browser.d.ts"
+  ],
+  "exclude": ["node_modules", ".next", "tmp"]
+}

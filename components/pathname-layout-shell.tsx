@@ -127,6 +127,9 @@ export function PathnameLayoutShell({
 	const isPortfolioRoute = pathname?.startsWith("/portfolio") ?? false;
 	const isStandaloneDemoRoute = pathname?.startsWith("/demo/") ?? false;
 	const isStandaloneAccountRoute =
+		pathname === "/auth/sign-up" ||
+		pathname === "/auth/sign-in" ||
+		pathname === "/privacy" ||
 		pathname === "/onboarding" ||
 		(pathname?.startsWith("/invitations/") ?? false) ||
 		(pathname?.startsWith("/tenants/new") ?? false);

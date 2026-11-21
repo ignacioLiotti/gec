@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
@@ -28,6 +29,7 @@ import { createSupabaseAdminClient } from "@/utils/supabase/admin";
 
 type GenerateRequestBody = {
   draftId?: string;
+  draftUpdatedAt?: string;
   generatedDocumentId?: string;
   workId?: string;
   folderPath?: string;
@@ -38,6 +40,7 @@ type GenerateRequestBody = {
 };
 
 const DOCUMENTS_BUCKET = "obra-documents";
+const draftVersionSchema = z.string().datetime({ offset: true });
 
 async function rollbackGeneratedDocumentArtifacts(params: {
   access: {
@@ -181,6 +184,8 @@ export async function POST(request: NextRequest) {
         ? body.inputData
         : {};
     let sourceDraftId: string | null = null;
+    let sourceDraftUpdatedAt: string | null = null;
+    let syncedSourceDraft: { id: string; updatedAt: string } | null = null;
     let editingGeneratedDocument:
       | {
           id: string;
@@ -193,6 +198,20 @@ export async function POST(request: NextRequest) {
       | null = null;
 
     if (typeof body.draftId === "string" && body.draftId.trim()) {
+      const expectedUpdatedAt =
+        typeof body.draftUpdatedAt === "string" ? body.draftUpdatedAt : "";
+      if (!expectedUpdatedAt) {
+        return NextResponse.json(
+          { error: "Falta la versión del borrador que intentas generar." },
+          { status: 428 },
+        );
+      }
+      if (!draftVersionSchema.safeParse(expectedUpdatedAt).success) {
+        return NextResponse.json(
+          { error: "La versión del borrador no es válida." },
+          { status: 400 },
+        );
+      }
       const { data: draft, error: draftError } = await supabase
         .from("generated_document_drafts")
         .select("*")
@@ -202,6 +221,16 @@ export async function POST(request: NextRequest) {
       if (draftError) throw draftError;
       if (!draft) {
         return NextResponse.json({ error: "Borrador no encontrado" }, { status: 404 });
+      }
+      sourceDraftUpdatedAt = String(draft.updated_at ?? "");
+      if (sourceDraftUpdatedAt !== expectedUpdatedAt) {
+        return NextResponse.json(
+          {
+            error:
+              "Este borrador cambió en otra pestaña. Conservamos tus cambios; recargá para revisar la última versión.",
+          },
+          { status: 409 },
+        );
       }
       workId = draft.obra_id as string;
       folderPath = normalizeFolderGenerationPath(draft.folder_path);
@@ -473,6 +502,11 @@ export async function POST(request: NextRequest) {
         .select("*")
         .maybeSingle();
       if (error) throw error;
+      if (!data) {
+        throw new Error(
+          "No se pudo actualizar el documento generado. Verifica tus permisos e intenta nuevamente.",
+        );
+      }
       generatedDocument = data;
     } else {
       const { data, error } = await supabase
@@ -534,8 +568,8 @@ export async function POST(request: NextRequest) {
       throw syncError;
     }
 
-    if (sourceDraftId) {
-      const { error: draftSyncError } = await supabase
+    if (sourceDraftId && sourceDraftUpdatedAt) {
+      const { data: syncedDraft, error: draftSyncError } = await supabase
         .from("generated_document_drafts")
         .update({
           status: "READY_TO_GENERATE",
@@ -543,9 +577,21 @@ export async function POST(request: NextRequest) {
           input_data: hydratedInputData,
         })
         .eq("id", sourceDraftId)
-        .eq("created_by", user.id);
+        .eq("created_by", user.id)
+        .eq("updated_at", sourceDraftUpdatedAt)
+        .select("id, updated_at")
+        .maybeSingle();
       if (draftSyncError) {
         console.error("[document-generation/generate] draft sync failed", draftSyncError);
+      } else if (syncedDraft) {
+        syncedSourceDraft = {
+          id: String(syncedDraft.id),
+          updatedAt: String(syncedDraft.updated_at ?? ""),
+        };
+      } else {
+        console.info("[document-generation/generate] draft sync skipped after concurrent update", {
+          sourceDraftId,
+        });
       }
     }
 
@@ -576,6 +622,7 @@ export async function POST(request: NextRequest) {
       relativeFolderPath: folderPath,
       relativeFilePath: `${folderPath}/${finalFileName}`,
       previewHtml: html,
+      sourceDraft: syncedSourceDraft,
     });
   } catch (error) {
     console.error("[document-generation/generate]", error);

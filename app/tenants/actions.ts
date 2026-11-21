@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { ACTIVE_TENANT_COOKIE } from "@/lib/tenant-selection";
 
 import { auth } from "@/lib/auth";
 import { STANDARD_TENANT_BLUEPRINT_KEY } from "@/lib/tenant-blueprints/constants";
@@ -77,7 +79,11 @@ export async function createTenantAction(
 	}
 
 	const tenantId = String(data);
-	redirect(
-		`/api/tenants/${tenantId}/switch?next=${encodeURIComponent("/setup")}`,
-	);
+	const cookieStore = await cookies();
+	cookieStore.set(ACTIVE_TENANT_COOKIE, tenantId, {
+		path: "/",
+		maxAge: 60 * 60 * 24 * 30,
+		sameSite: "lax",
+	});
+	redirect("/setup");
 }

@@ -1,4 +1,6 @@
 "use client";
+import { Textarea } from "@/components/ui/textarea";
+
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -99,12 +101,12 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
         <label htmlFor="review-comment" className="text-sm font-medium text-stone-800">
           Comentario
         </label>
-        <textarea
+        <Textarea
           id="review-comment"
           value={comment}
           onChange={(event) => setComment(event.target.value)}
           placeholder="Escribe por que se aprueba o rechaza..."
-          className="mt-2 min-h-28 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-200/60"
+          className="mt-2 min-h-28 w-full resize-none px-3 py-3 text-sm transition"
         />
       </div>
 
@@ -112,7 +114,7 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
         <Button
           type="button"
           variant="destructive"
-          className="h-12 text-md"
+          className="h-12"
           disabled={disabled || updating}
           onClick={() => onDecision("REJECTED", comment)}
         >
@@ -122,7 +124,7 @@ const ReviewCommentActions = memo(function ReviewCommentActions({
         <Button
           type="button"
           variant="success"
-          className="h-12 text-md"
+          className="h-12"
           disabled={disabled || updating}
           onClick={() => onDecision("APPROVED", comment)}
         >
@@ -303,7 +305,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
             <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-600">
               {counts.pending} pendientes
             </span>
-            <Button type="button" variant="outline" className="h-9 rounded-md" onClick={() => void loadQueue()}>
+            <Button type="button" variant="outline" className="h-9" onClick={() => void loadQueue()}>
               <RotateCcw className="mr-2 h-4 w-4" />
               Actualizar
             </Button>
@@ -384,7 +386,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 w-9 rounded-md p-0"
+                className="h-9 w-9 p-0"
                 onClick={() => setZoom((current) => Math.max(MIN_PREVIEW_ZOOM, current - 8))}
                 disabled={!currentDocument}
                 aria-label="Alejar"
@@ -395,7 +397,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 w-9 rounded-md p-0"
+                className="h-9 w-9 p-0"
                 onClick={() => setZoom((current) => Math.min(MAX_PREVIEW_ZOOM, current + 8))}
                 disabled={!currentDocument || zoom >= MAX_PREVIEW_ZOOM}
                 aria-label="Acercar"
@@ -451,7 +453,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
               <p className="mt-1 text-sm text-stone-500">{currentDocument?.createdBy?.label ?? "Usuario"}</p>
             </div>
             {currentDocument?.canEdit ? (
-              <Button asChild type="button" variant="outline" className="h-9 rounded-md">
+              <Button asChild type="button" variant="outline" className="h-9">
                 <Link href={`/document-generation?generatedId=${encodeURIComponent(currentDocument.id)}`}>
                   Editar
                 </Link>
@@ -461,7 +463,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 rounded-md"
+                className="h-9"
                 onClick={() => void copyReviewLink()}
               >
                 <Copy className="mr-2 h-4 w-4" />
@@ -492,7 +494,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 flex-1 rounded-lg"
+                className="h-10 flex-1"
                 disabled={documents.length < 2}
                 onClick={() => handleSelectRelative(-1)}
               >
@@ -502,7 +504,7 @@ export function DocumentReviewPageClient({ canReview }: { canReview: boolean }) 
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 flex-1 rounded-lg"
+                className="h-10 flex-1"
                 disabled={documents.length < 2}
                 onClick={() => handleSelectRelative(1)}
               >
