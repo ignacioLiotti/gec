@@ -11,8 +11,7 @@ function resolveDefaultValue(value: unknown | (() => unknown)) {
 }
 
 export function createRowFromColumns<Row extends FormTableRow>(columns: ColumnDef<Row>[]): Row {
-	const hasCrypto =
-		typeof crypto !== "undefined" && typeof crypto.randomUUID === "function";
+	const hasCrypto = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function";
 	const row: FormTableRow = {
 		id: hasCrypto ? crypto.randomUUID() : FALLBACK_ID(),
 	};
@@ -166,12 +165,30 @@ export function formatDateSafe(date: Date, formatString: string) {
 	}
 }
 
+export function shallowEqualStringArrays(a: string[], b: string[]) {
+	if (a === b) return true;
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i += 1) {
+		if (a[i] !== b[i]) return false;
+	}
+	return true;
+}
 
+export function buildFormSnapshot<Row extends FormTableRow>(rows: Row[] | undefined) {
+	const safeRows = Array.isArray(rows) ? rows : [];
+	const rowOrder = safeRows.map((row) => row.id);
+	const rowsById = safeRows.reduce<Record<string, Row>>((acc, row) => {
+		acc[row.id] = { ...row };
+		return acc;
+	}, {});
+	return { rowOrder, rowsById };
+}
 
-
-
-
-
-
-
-
+export function hasSameRowIdentity<Row extends FormTableRow>(
+	nextRows: Row[] | undefined,
+	currentOrder: string[]
+) {
+	if (!Array.isArray(nextRows)) return currentOrder.length === 0;
+	if (nextRows.length !== currentOrder.length) return false;
+	return nextRows.every((row, index) => row.id === currentOrder[index]);
+}

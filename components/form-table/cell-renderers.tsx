@@ -1,26 +1,22 @@
-import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button, LightButton } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-} from "@/components/ui/select";
+	findClosestMainTableSelectOption,
+	getMainTableSelectOptionId,
+	resolveMainTableSelectOption,
+	type MainTableSelectOption,
+} from "@/lib/main-table-select";
+import { parseFlexibleDateValue, parseLocalizedNumber, toNumericValue } from "@/lib/tablas";
+import { cn } from "@/lib/utils";
 import {
-	Ban,
 	AlertTriangle,
-	ArrowRight,
+	Ban,
 	Bell,
 	Bookmark,
 	Calendar as CalendarIcon,
-	CalendarDays,
 	Check,
 	ChevronDown,
 	Circle,
@@ -34,571 +30,20 @@ import {
 	Pause,
 	Play,
 	Shield,
-	Sparkles,
 	Star,
 	Truck,
 	User,
 	Wrench,
 	X,
 } from "lucide-react";
-import { es } from "date-fns/locale";
-import { cn } from "@/lib/utils";
-import {
-	findClosestMainTableSelectOption,
-	getMainTableSelectOptionId,
-	resolveMainTableSelectOption,
-	type MainTableSelectOption,
-} from "@/lib/main-table-select";
-import {
-	formatDateAsIso,
-	formatDateAsDmy,
-	parseFlexibleDateValue,
-	parseLocalizedNumber,
-	toNumericValue,
-} from "@/lib/tablas";
-import type {
-	CellSuggestion,
-	ColumnDef,
-	FormTableRow,
-} from "./types";
-import { resolveCellSuggestion } from "./cell-suggestions";
+import { type ReactNode } from "react";
 import { escapeRegExp, formatDateSafe } from "./table-utils";
+import type { ColumnDef, FormTableRow } from "./types";
 
-export type EditableCellValue = string | number | readonly string[] | null | undefined;
-
-const CELL_SYNC_ON_CHANGE_DEBOUNCE_MS = 180;
-const NO_PENDING_SYNC = Symbol("no-pending-sync");
-
-function useDebouncedFormSync(syncToForm: (value: unknown) => void) {
-	const syncToFormRef = useRef(syncToForm);
-	const syncTimeoutRef = useRef<number | null>(null);
-	const pendingValueRef = useRef<unknown | typeof NO_PENDING_SYNC>(NO_PENDING_SYNC);
-
-	useEffect(() => {
-		syncToFormRef.current = syncToForm;
-	}, [syncToForm]);
-
-	const clearPendingSync = useCallback(() => {
-		if (syncTimeoutRef.current !== null) {
-			window.clearTimeout(syncTimeoutRef.current);
-			syncTimeoutRef.current = null;
-		}
-		pendingValueRef.current = NO_PENDING_SYNC;
-	}, []);
-
-	const scheduleSync = useCallback((value: unknown) => {
-		clearPendingSync();
-		pendingValueRef.current = value;
-		syncTimeoutRef.current = window.setTimeout(() => {
-			syncTimeoutRef.current = null;
-			const pendingValue = pendingValueRef.current;
-			pendingValueRef.current = NO_PENDING_SYNC;
-			if (pendingValue !== NO_PENDING_SYNC) {
-				syncToFormRef.current(pendingValue);
-			}
-		}, CELL_SYNC_ON_CHANGE_DEBOUNCE_MS);
-	}, [clearPendingSync]);
-
-	const flushSync = useCallback((value: unknown) => {
-		clearPendingSync();
-		syncToFormRef.current(value);
-	}, [clearPendingSync]);
-
-	useEffect(
-		() => () => {
-			if (syncTimeoutRef.current !== null) {
-				window.clearTimeout(syncTimeoutRef.current);
-				syncTimeoutRef.current = null;
-			}
-			const pendingValue = pendingValueRef.current;
-			pendingValueRef.current = NO_PENDING_SYNC;
-			if (pendingValue !== NO_PENDING_SYNC) {
-				syncToFormRef.current(pendingValue);
-			}
-		},
-		[],
-	);
-
-	return { clearPendingSync, flushSync, scheduleSync };
-}
-
-function toIsoDateOnly(date: Date): string {
-	return formatDateAsIso(date);
-}
-
-function parseDateValue(value: unknown): Date | null {
-	return parseFlexibleDateValue(value);
-}
-
-function normalizeDateInputValue(value: EditableCellValue): string {
-	if (value == null) return "";
-	const parsed = parseDateValue(value);
-	if (!parsed) return "";
-	return toIsoDateOnly(parsed);
-}
-
-function buildSuggestionKey<Row extends FormTableRow>(
-	suggestion: CellSuggestion<Row> | null
-) {
-	if (!suggestion) return null;
-	return `${suggestion.kind}:${suggestion.sourceInput}:${suggestion.suggestedDisplayValue}`;
-}
-
-function CellSuggestionPrompt<Row extends FormTableRow>({
-	suggestion,
-	onApply,
-	onIgnore,
-	className,
-}: {
-	suggestion: CellSuggestion<Row> | null;
-	onApply: () => void;
-	onIgnore: () => void;
-	className?: string;
-}) {
-	const [open, setOpen] = useState(false);
-
-	if (!suggestion) return null;
-
-	return (
-		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className={cn(
-						"pointer-events-all absolute right-9 z-20 inline-flex h-6 items-center rounded-full border border-orange-200 bg-orange-50 px-1 text-[10px] font-semibold uppercase tracking-wide text-orange-700 shadow-sm",
-						className
-					)}
-				>
-					<Sparkles className="-mr-1 -ml-1 size-3 py-0.5 font-normal" />
-					Sugerencia
-				</Button>
-			</PopoverTrigger>
-			<PopoverContent align="end" side="bottom" className="w-72 p-0">
-				<div className="border-b bg-orange-50/70 px-4 py-3">
-					<p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">
-						Sugerencia automática
-					</p>
-					<p className="mt-0.5 text-xs text-muted-foreground">{suggestion.description}</p>
-				</div>
-				<div className="space-y-3 px-4 py-3 text-sm">
-					<div className="flex items-center gap-2">
-						<div className="min-w-0 flex-1 rounded-lg border bg-muted/30 px-3 py-2">
-							<p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-								Detectado
-							</p>
-							<p className="mt-0.5 truncate font-medium text-foreground">{suggestion.sourceInput}</p>
-						</div>
-						<ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-						<div className="min-w-0 flex-1 rounded-lg border-2 border-orange-300 bg-orange-50 px-3 py-2">
-							<p className="text-[10px] uppercase tracking-wide text-orange-600">
-								Sugerido
-							</p>
-							<p className="mt-0.5 truncate font-semibold text-orange-900">{suggestion.suggestedDisplayValue}</p>
-						</div>
-					</div>
-					<div className="flex items-center justify-end gap-2">
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onPointerDown={(event) => {
-								event.preventDefault();
-								event.stopPropagation();
-							}}
-							onClick={(event) => {
-								event.preventDefault();
-								event.stopPropagation();
-								onIgnore();
-								setOpen(false);
-							}}
-						>
-							Ignorar
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							onPointerDown={(event) => {
-								event.preventDefault();
-								event.stopPropagation();
-							}}
-							onClick={(event) => {
-								event.preventDefault();
-								event.stopPropagation();
-								onApply();
-								setOpen(false);
-							}}
-						>
-							Aplicar
-						</Button>
-					</div>
-				</div>
-			</PopoverContent>
-		</Popover>
-	);
-}
-
-function DateCellEditor<Row extends FormTableRow>({
-	value,
-	setValue,
-	handleBlur,
-	required,
-	inputProps,
-	column,
-	row,
-	forceSyncOnChange = false,
-}: {
-	value: EditableCellValue;
-	setValue: (value: unknown) => void;
-	handleBlur: () => void;
-	required?: boolean;
-	inputProps?: Record<string, string>;
-	column: ColumnDef<Row>;
-	row: Row;
-	forceSyncOnChange?: boolean;
-}) {
-	const [open, setOpen] = useState(false);
-	const selectedDate = parseDateValue(value ?? null);
-	const externalTypedValue = useMemo(() => {
-		if (forceSyncOnChange) return "";
-		if (!value) return "";
-		return selectedDate ? formatDateAsDmy(selectedDate) : String(value);
-	}, [forceSyncOnChange, value, selectedDate]);
-	const [draftValue, setDraftValue] = useState<string | null>(null);
-	const typedValue = draftValue ?? externalTypedValue;
-
-	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
-	const suggestion = useMemo(
-		() =>
-			resolveCellSuggestion({
-				rawValue: typedValue,
-				currentValue: value,
-				cellType: "date",
-				column,
-				row,
-			}),
-		[typedValue, value, column, row]
-	);
-	const suggestionKey = buildSuggestionKey(suggestion);
-	const visibleSuggestion =
-		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
-
-	return (
-		<div className="children-input-hidden absolute inset-0 flex h-full w-full items-center gap-1 px-2">
-			<Input
-				type="text"
-				inputMode="numeric"
-				placeholder="dd/mm/aaaa"
-				{...inputProps}
-				value={typedValue}
-				onChange={(event) => {
-					const nextValue = event.target.value;
-					setDraftValue(nextValue);
-					if (ignoredSuggestionKey) {
-						setIgnoredSuggestionKey(null);
-					}
-					if (forceSyncOnChange) {
-						setValue(nextValue);
-					}
-				}}
-				onBlur={() => {
-					const nextRaw = typedValue.trim();
-					if (!nextRaw) {
-						if (!required) {
-							setValue(null);
-						}
-						setDraftValue(null);
-						handleBlur();
-						return;
-					}
-					const parsed = parseDateValue(nextRaw);
-					setDraftValue(null);
-					const nextValue = parsed ? toIsoDateOnly(parsed) : nextRaw;
-					// Avoid false-dirty: the DB may store dates in a different format
-					// (e.g. "2025-05-01T03:00:00+00:00" or "1/5/2025"). Normalise both
-					// sides to ISO and skip setValue when the date hasn't actually changed.
-					const currentParsed = parseDateValue(value ?? null);
-					const currentNormalized = currentParsed
-						? toIsoDateOnly(currentParsed)
-						: value != null
-							? String(value)
-							: null;
-					if (nextValue !== currentNormalized) {
-						setValue(nextValue);
-					}
-					handleBlur();
-				}}
-				className={cn(
-					"h-full min-w-0 basis-0 flex-1 rounded-none border-0 bg-transparent pl-1 shadow-none focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
-					visibleSuggestion ? "pr-24" : "pr-0"
-				)}
-			/>
-			<CellSuggestionPrompt
-				suggestion={visibleSuggestion}
-				onApply={() => {
-					if (!visibleSuggestion) return;
-					setDraftValue(visibleSuggestion.suggestedDisplayValue);
-					setValue(visibleSuggestion.suggestedValue);
-					setIgnoredSuggestionKey(null);
-				}}
-				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
-				className="absolute right-9 top-1"
-			/>
-			<Popover open={open} onOpenChange={setOpen}>
-				<PopoverTrigger asChild>
-					<LightButton
-						type="button"
-						variant="default"
-						size="icon-sm"
-						aria-label="Abrir calendario"
-						className="shrink-0 bg-white text-content [--btn-shadow:var(--shadow-light-button)] hover:bg-accent-soft hover:text-orange-primary hover:[--btn-ring:hsl(var(--orange-primary)_/_0.32)] focus-visible:bg-accent-soft focus-visible:text-orange-primary focus-visible:ring-2 focus-visible:ring-orange-primary/35 focus-visible:ring-offset-0"
-					>
-						<CalendarDays className="size-4 shrink-0" />
-					</LightButton>
-				</PopoverTrigger>
-				<PopoverContent
-					className="w-auto overflow-hidden rounded-xl border-stroke-soft bg-surface p-0 shadow-dropdown"
-					align="start"
-				>
-					<Calendar
-						locale={es}
-						mode="single"
-						selected={selectedDate ?? undefined}
-						defaultMonth={selectedDate ?? new Date()}
-						onSelect={(date) => {
-							if (!date) return;
-							setValue(toIsoDateOnly(date));
-							setDraftValue(null);
-							handleBlur();
-							setOpen(false);
-						}}
-						captionLayout="dropdown"
-					/>
-					<div className="flex items-center justify-between border-t border-stroke-soft bg-surface-muted/60 px-3 py-2">
-						<LightButton
-							type="button"
-							variant="default"
-							onClick={() => {
-								if (!required) {
-									setValue(null);
-									setDraftValue(null);
-									handleBlur();
-								}
-								setOpen(false);
-							}}
-							disabled={required}
-						>
-							Limpiar
-						</LightButton>
-						<LightButton
-							type="button"
-							variant="primarySolid"
-							onClick={() => setOpen(false)}
-						>
-							Cerrar
-						</LightButton>
-					</div>
-				</PopoverContent>
-			</Popover>
-		</div>
-	);
-}
-
-/**
- * LocalInput: A buffered input that manages local state during typing
- * and only syncs to the form on blur. This prevents cascading re-renders
- * on every keystroke.
- */
-function LocalInput<Row extends FormTableRow>({
-	value: externalValue,
-	onChange: syncToForm,
-	onBlur,
-	transformOnBlur,
-	formatDisplayValue,
-	column,
-	row,
-	cellType,
-	syncOnChange = false,
-	forceSyncOnChange = false,
-	...props
-}: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & {
-	value: EditableCellValue;
-	onChange: (value: unknown) => void;
-	onBlur?: () => void;
-	transformOnBlur?: (value: string) => unknown;
-	formatDisplayValue?: (value: EditableCellValue) => string;
-	column: ColumnDef<Row>;
-	row: Row;
-	cellType: NonNullable<ColumnDef<Row>["cellType"]> | "text";
-	syncOnChange?: boolean;
-	forceSyncOnChange?: boolean;
-}) {
-	// Convert external value to string for the input
-	const normalizedExternal =
-		props.type === "date"
-			? normalizeDateInputValue(externalValue)
-			: formatDisplayValue
-				? formatDisplayValue(externalValue)
-				: externalValue == null
-					? ""
-					: String(externalValue);
-	const displayedExternal = forceSyncOnChange ? "" : normalizedExternal;
-	const [draftValue, setDraftValue] = useState<string | null>(null);
-	const localValue = draftValue ?? displayedExternal;
-	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
-	const { clearPendingSync, flushSync, scheduleSync } = useDebouncedFormSync(syncToForm);
-
-	const suggestion = useMemo(
-		() =>
-			resolveCellSuggestion({
-				rawValue: localValue,
-				currentValue: externalValue,
-				cellType,
-				column,
-				row,
-			}),
-		[localValue, externalValue, cellType, column, row]
-	);
-	const suggestionKey = buildSuggestionKey(suggestion);
-	const visibleSuggestion =
-		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
-
-	const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-		const nextValue = e.target.value;
-		setDraftValue(nextValue);
-		setIgnoredSuggestionKey(null);
-		if (syncOnChange || forceSyncOnChange) {
-			scheduleSync(nextValue);
-		}
-	}, [forceSyncOnChange, scheduleSync, syncOnChange]);
-
-	const handleBlur = useCallback(() => {
-		const finalValue = transformOnBlur ? transformOnBlur(localValue) : localValue;
-		const shouldSync = transformOnBlur
-			? !Object.is(finalValue, externalValue)
-			: localValue !== displayedExternal;
-
-		if (shouldSync) {
-			flushSync(finalValue);
-		} else {
-			clearPendingSync();
-		}
-
-		setDraftValue(null);
-		onBlur?.();
-	}, [clearPendingSync, externalValue, flushSync, localValue, onBlur, transformOnBlur, displayedExternal]);
-
-	return (
-		<>
-			<Input
-				{...props}
-				value={localValue}
-				onChange={handleChange}
-				onBlur={handleBlur}
-				className={cn(props.className, visibleSuggestion ? "pr-24" : undefined)}
-			/>
-			<CellSuggestionPrompt
-				suggestion={visibleSuggestion}
-				onApply={() => {
-					if (!visibleSuggestion) return;
-					setDraftValue(visibleSuggestion.suggestedDisplayValue);
-					flushSync(visibleSuggestion.suggestedValue);
-					setIgnoredSuggestionKey(null);
-				}}
-				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
-				className="absolute right-1 top-1 z-20"
-			/>
-		</>
-	);
-}
-
-function LocalTextarea<Row extends FormTableRow>({
-	value: externalValue,
-	onChange: syncToForm,
-	onBlur,
-	column,
-	row,
-	cellType,
-	syncOnChange = false,
-	forceSyncOnChange = false,
-	className,
-	...props
-}: Omit<React.ComponentProps<"textarea">, "onChange" | "onBlur" | "value"> & {
-	value: EditableCellValue;
-	onChange: (value: unknown) => void;
-	onBlur?: () => void;
-	column: ColumnDef<Row>;
-	row: Row;
-	cellType: NonNullable<ColumnDef<Row>["cellType"]> | "text";
-	syncOnChange?: boolean;
-	forceSyncOnChange?: boolean;
-}) {
-	const normalizedExternal = externalValue == null ? "" : String(externalValue);
-	const displayedExternal = forceSyncOnChange ? "" : normalizedExternal;
-	const [draftValue, setDraftValue] = useState<string | null>(null);
-	const localValue = draftValue ?? displayedExternal;
-	const [ignoredSuggestionKey, setIgnoredSuggestionKey] = useState<string | null>(null);
-	const { clearPendingSync, flushSync, scheduleSync } = useDebouncedFormSync(syncToForm);
-
-	const suggestion = useMemo(
-		() =>
-			resolveCellSuggestion({
-				rawValue: localValue,
-				currentValue: externalValue,
-				cellType,
-				column,
-				row,
-			}),
-		[localValue, externalValue, cellType, column, row]
-	);
-	const suggestionKey = buildSuggestionKey(suggestion);
-	const visibleSuggestion =
-		suggestionKey && suggestionKey === ignoredSuggestionKey ? null : suggestion;
-
-	const handleChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-		const nextValue = event.target.value;
-		setDraftValue(nextValue);
-		setIgnoredSuggestionKey(null);
-		if (syncOnChange || forceSyncOnChange) {
-			scheduleSync(nextValue);
-		}
-	}, [forceSyncOnChange, scheduleSync, syncOnChange]);
-
-	const handleBlur = useCallback(() => {
-		if (localValue !== displayedExternal) {
-			flushSync(localValue);
-		} else {
-			clearPendingSync();
-		}
-		setDraftValue(null);
-		onBlur?.();
-	}, [clearPendingSync, displayedExternal, flushSync, localValue, onBlur]);
-
-	return (
-		<>
-			<textarea
-				{...props}
-				value={localValue}
-				onChange={handleChange}
-				onBlur={handleBlur}
-				className={cn(className, visibleSuggestion ? "pr-24" : undefined)}
-			/>
-			<CellSuggestionPrompt
-				suggestion={visibleSuggestion}
-				onApply={() => {
-					if (!visibleSuggestion) return;
-					setDraftValue(visibleSuggestion.suggestedDisplayValue);
-					flushSync(visibleSuggestion.suggestedValue);
-					setIgnoredSuggestionKey(null);
-				}}
-				onIgnore={() => setIgnoredSuggestionKey(suggestionKey)}
-				className="absolute right-1 top-1 z-20"
-			/>
-		</>
-	);
-}
-
+import { LocalInput, LocalTextarea } from "./cell-buffered-inputs";
+import { DateCellEditor } from "./cell-date-editor";
+import type { EditableCellValue } from "./types";
+export type { EditableCellValue } from "./types";
 export type EditableContentArgs<Row extends FormTableRow> = {
 	column: ColumnDef<Row>;
 	row: Row;
@@ -716,10 +161,7 @@ const SELECT_ICON_BY_NAME = {
 	link: Link2,
 } as const;
 
-function renderSelectOptionBadge(
-	option: MainTableSelectOption,
-	highlightQuery: string
-) {
+function renderSelectOptionBadge(option: MainTableSelectOption, highlightQuery: string) {
 	const IconComponent = option.icon ? SELECT_ICON_BY_NAME[option.icon] : null;
 	return (
 		<Badge
@@ -768,7 +210,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		}
 		case "date": {
 			if (!value) return <span>-</span>;
-			const date = parseDateValue(value);
+			const date = parseFlexibleDateValue(value);
 			if (!date) return <span>{String(value)}</span>;
 			if (config.dateFormat === "custom" && config.customDateFormat) {
 				return <span>{formatDateSafe(date, config.customDateFormat)}</span>;
@@ -803,7 +245,10 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			const tagsStr = String(value || "");
 			if (!tagsStr) return <span>-</span>;
 			const tags = config.tagSeparator
-				? tagsStr.split(config.tagSeparator).map((t) => t.trim()).filter(Boolean)
+				? tagsStr
+						.split(config.tagSeparator)
+						.map((t) => t.trim())
+						.filter(Boolean)
 				: [tagsStr];
 			return (
 				<div className="flex flex-wrap gap-1">
@@ -818,10 +263,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		case "link": {
 			const text = String(value || "");
 			if (!text) return <span>-</span>;
-			const href =
-				typeof config.href === "function"
-					? config.href(row)
-					: config.href || text;
+			const href = typeof config.href === "function" ? config.href(row) : config.href || text;
 			return (
 				<a
 					href={href}
@@ -850,13 +292,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 		case "image": {
 			const src = String(value || "");
 			if (!src) return <span>-</span>;
-			return (
-				<img
-					src={src}
-					alt="Vista previa"
-					className="size-10 object-cover rounded"
-				/>
-			);
+			return <img src={src} alt="Vista previa" className="size-10 object-cover rounded" />;
 		}
 		case "badge": {
 			const text = String(value || "");
@@ -879,7 +315,11 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			const text = String(value || "").trim();
 			if (!text) return <span>-</span>;
 			const selectOptions = config.selectOptions ?? [];
-			const matched = resolveMainTableSelectOption(text, selectOptions, config.selectName ?? column.id);
+			const matched = resolveMainTableSelectOption(
+				text,
+				selectOptions,
+				config.selectName ?? column.id
+			);
 			if (matched) {
 				return renderSelectOptionBadge(matched, highlightQuery);
 			}
@@ -893,9 +333,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 			const text = String(value || "");
 			if (!text) return <span>-</span>;
 			const iconName =
-				typeof config.iconName === "function"
-					? config.iconName(row)
-					: config.iconName;
+				typeof config.iconName === "function" ? config.iconName(row) : config.iconName;
 			return (
 				<div
 					className={cn(
@@ -904,9 +342,7 @@ export function renderReadOnlyValue<Row extends FormTableRow>(
 					)}
 				>
 					{iconName && (
-						<span className={cn("text-muted-foreground", config.iconClassName)}>
-							{iconName}
-						</span>
+						<span className={cn("text-muted-foreground", config.iconClassName)}>{iconName}</span>
 					)}
 					<span>
 						<HighlightedText text={text} query={highlightQuery} />
@@ -1167,23 +603,15 @@ export function renderEditableContent<Row extends FormTableRow>({
 								</span>
 							</SelectTrigger>
 							<SelectContent className="z-[10000001]">
-								{!column.required ? (
-									<SelectItem value={clearValue}>Sin definir</SelectItem>
-								) : null}
+								{!column.required ? <SelectItem value={clearValue}>Sin definir</SelectItem> : null}
 								{!matched ? (
 									<SelectItem value={unresolvedValue} disabled>
 										{currentText ? `Actual: ${currentText}` : "Sin definir"}
 									</SelectItem>
 								) : null}
 								{selectOptions.map((option, optionIndex) => {
-									const IconComponent = option.icon
-										? SELECT_ICON_BY_NAME[option.icon]
-										: null;
-									const optionId = getMainTableSelectOptionId(
-										option,
-										selectName,
-										optionIndex
-									);
+									const IconComponent = option.icon ? SELECT_ICON_BY_NAME[option.icon] : null;
+									const optionId = getMainTableSelectOptionId(option, selectName, optionIndex);
 									return (
 										<SelectItem key={optionId} value={optionId}>
 											<span className="inline-flex items-center gap-2">
@@ -1196,7 +624,10 @@ export function renderEditableContent<Row extends FormTableRow>({
 							</SelectContent>
 						</Select>
 						{closest ? (
-							<Badge variant="outline" className="whitespace-nowrap border-orange-200 bg-orange-50 text-orange-700">
+							<Badge
+								variant="outline"
+								className="whitespace-nowrap border-orange-200 bg-orange-50 text-orange-700"
+							>
 								Sugerencia: {closest.option.text}
 							</Badge>
 						) : null}
@@ -1250,58 +681,55 @@ export function renderEditableContent<Row extends FormTableRow>({
 					className={hiddenInputClass}
 				/>
 			);
-		default:
-			{
-				const stringValue = value == null ? "" : String(value);
-				const shouldUseExpandedTextEditor =
-					stringValue.length > 80 || Number(column.width ?? 0) >= 220;
-				const input = (
-					shouldUseExpandedTextEditor ? (
-						<LocalTextarea
-							className={floatingTextareaClass}
-							{...inputDataProps}
-							value={value ?? ""}
-							onChange={setValue}
-							onBlur={handleBlur}
-							column={column}
-							row={row}
-							cellType="text"
-							syncOnChange={config.syncOnChange}
-							forceSyncOnChange={isBulkEditing}
-							required={column.required}
-							rows={1}
-						/>
-					) : (
-						<LocalInput
-							className={hiddenInputClass}
-							{...inputDataProps}
-							value={value ?? ""}
-							onChange={setValue}
-							onBlur={handleBlur}
-							column={column}
-							row={row}
-							cellType="text"
-							syncOnChange={config.syncOnChange}
-							forceSyncOnChange={isBulkEditing}
-							required={column.required}
-						/>
-					)
+		default: {
+			const stringValue = value == null ? "" : String(value);
+			const shouldUseExpandedTextEditor =
+				stringValue.length > 80 || Number(column.width ?? 0) >= 220;
+			const input = shouldUseExpandedTextEditor ? (
+				<LocalTextarea
+					className={floatingTextareaClass}
+					{...inputDataProps}
+					value={value ?? ""}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="text"
+					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
+					required={column.required}
+					rows={1}
+				/>
+			) : (
+				<LocalInput
+					className={hiddenInputClass}
+					{...inputDataProps}
+					value={value ?? ""}
+					onChange={setValue}
+					onBlur={handleBlur}
+					column={column}
+					row={row}
+					cellType="text"
+					syncOnChange={config.syncOnChange}
+					forceSyncOnChange={isBulkEditing}
+					required={column.required}
+				/>
+			);
+
+			if (typeof config.renderEditable === "function") {
+				return withReadOnlyLayer(
+					config.renderEditable({
+						value,
+						row,
+						highlightQuery,
+						input,
+						setValue,
+						handleBlur,
+					})
 				);
-
-				if (typeof config.renderEditable === "function") {
-					return withReadOnlyLayer(
-						config.renderEditable({
-							value,
-							row,
-							highlightQuery,
-							input,
-							setValue,
-							handleBlur,
-						})
-					);
-				}
-
-				return withReadOnlyLayer(input);
 			}
+
+			return withReadOnlyLayer(input);
+		}
 	}
 }

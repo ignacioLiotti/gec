@@ -372,3 +372,5 @@ export type RowColorInfo = {
 	tone: RowColorTone;
 	previewing: boolean;
 };
+
+export type EditableCellValue = string | number | readonly string[] | null | undefined;
