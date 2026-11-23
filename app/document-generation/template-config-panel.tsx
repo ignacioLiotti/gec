@@ -577,8 +577,40 @@ function useDocumentTemplateConfig(workId: string) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishingIssuers, setPublishingIssuers] = useState(false);
+  const [changingTemplateStatus, setChangingTemplateStatus] = useState(false);
+
+  async function changeTemplateStatus(template: DocumentTemplateSummary) {
+    const status = template.status === "active" ? "draft" : "active";
+    setChangingTemplateStatus(true);
+    try {
+      const response = await fetch("/api/document-generation/templates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: template.id, status }),
+      });
+      const payload = (await response.json()) as {
+        template?: DocumentTemplateSummary | null;
+        templates?: DocumentTemplateSummary[];
+        error?: string;
+      };
+      if (!response.ok || !payload.templates || !payload.template) {
+        throw new Error(payload.error || "No se pudo cambiar el estado.");
+      }
+      const updatedTemplate = payload.template;
+      setTemplates(payload.templates);
+      setSelectedTemplateId((current) => current === template.id ? updatedTemplate.id : current);
+      setDraft((current) => current?.id === template.id ? { ...current, id: updatedTemplate.id, status } : current);
+      toast.success(status === "draft" ? "Plantilla guardada como borrador." : "Plantilla publicada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo cambiar el estado.");
+    } finally {
+      setChangingTemplateStatus(false);
+    }
+  }
+
+
   const canPublishIssuers = templates.some((template) =>
-    template.tenantScoped && template.key === "purchase-order-default" && template.contentHtml.includes('class="company-copy"'),
+    template.tenantScoped && template.status === "active" && template.key === "purchase-order-default" && template.contentHtml.includes('class="company-copy"'),
   ) && !["purchase-order-concret-libres", "purchase-order-libresmat"].every((key) => templates.some((template) => template.key === key));
 
   async function publishIssuers() {
@@ -714,7 +746,7 @@ function useDocumentTemplateConfig(workId: string) {
     setNewDocumentTypeDraft((current) => ({ ...current, ...patch }));
   };
 
-  const createDocumentType = async () => {
+  const createDocumentType = async (status: "draft" | "active" = "active") => {
     const label = newDocumentTypeDraft.label.trim();
     const documentType = normalizeDocumentType(newDocumentTypeDraft.documentType || label);
     const templateName = newDocumentTypeDraft.templateName.trim() || label;
@@ -739,7 +771,7 @@ function useDocumentTemplateConfig(workId: string) {
           description: newDocumentTypeDraft.description.trim() || null,
           documentType,
           targetFolderPath: newDocumentTypeDraft.targetFolderPath || null,
-          status: "active",
+          status,
           contentHtml: buildDefaultDocumentTypeHtml(label),
           schema: {
             fields,
@@ -1200,6 +1232,8 @@ function useDocumentTemplateConfig(workId: string) {
     canPublishIssuers,
     publishingIssuers,
     publishIssuers,
+    changingTemplateStatus,
+    changeTemplateStatus,
   };
 }
 
@@ -1251,6 +1285,8 @@ export function TemplatePickerCard() {
     canPublishIssuers,
     publishingIssuers,
     publishIssuers,
+    changingTemplateStatus,
+    changeTemplateStatus,
   } = useTemplateConfig();
 
   return (
@@ -1291,8 +1327,8 @@ export function TemplatePickerCard() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => (
+            <div key={template.id} className="flex flex-col gap-2">
             <button
-              key={template.id}
               type="button"
               onClick={() => handleTemplateSelect(template.id)}
               className={`h-full overflow-hidden rounded-xl border text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${selectedTemplateId === template.id
@@ -1322,6 +1358,9 @@ export function TemplatePickerCard() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
+                  <Badge variant={template.status === "active" ? "success" : "secondary"}>
+                    {template.status === "active" ? "Publicada" : template.status === "draft" ? "Borrador" : template.status === "archived" ? "Archivada" : "Inactiva"}
+                  </Badge>
                   <Badge variant="outline" className="rounded-full">
                     {template.tenantScoped ? "tenant" : "system"}
                   </Badge>
@@ -1331,6 +1370,12 @@ export function TemplatePickerCard() {
                 </div>
               </div>
             </button>
+            {!templates.some((version) => version.key === template.key && version.version > template.version) ? (
+              <Button type="button" variant="outline" size="sm" className="self-start" disabled={changingTemplateStatus} onClick={() => void changeTemplateStatus(template)}>
+                {template.status === "active" ? "Pasar a borrador" : "Publicar plantilla"}
+              </Button>
+            ) : null}
+            </div>
           ))}
         </div>
       </CardContent>
@@ -1366,7 +1411,6 @@ function NewDocumentTypeCreator() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-content">Crear tipo documental</p>
-          <p className="mt-1 text-xs text-content-muted">Se crea una template base activa para este tenant.</p>
         </div>
         {normalizedDocumentType ? (
           <Badge variant="secondary" className="rounded-full">
@@ -1449,6 +1493,9 @@ function NewDocumentTypeCreator() {
           disabled={creatingDocumentTypeSaving}
         >
           Cancelar
+        </Button>
+        <Button type="button" variant="outline" disabled={!canCreate || creatingDocumentTypeSaving} onClick={() => void createDocumentType("draft")}>
+          Crear como borrador
         </Button>
         <Button type="submit" className="rounded-md" disabled={!canCreate || creatingDocumentTypeSaving}>
           {creatingDocumentTypeSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
@@ -1646,10 +1693,10 @@ export function TemplateConfigEditorPanel() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="draft">draft</SelectItem>
-                          <SelectItem value="active">active</SelectItem>
-                          <SelectItem value="inactive">inactive</SelectItem>
-                          <SelectItem value="archived">archived</SelectItem>
+                          <SelectItem value="draft">Borrador</SelectItem>
+                          <SelectItem value="active">Publicada</SelectItem>
+                          <SelectItem value="inactive">Inactiva</SelectItem>
+                          <SelectItem value="archived">Archivada</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

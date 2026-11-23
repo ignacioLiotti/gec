@@ -179,6 +179,78 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const access = await resolveRequestAccessContext();
+    const { supabase, user, tenantId } = access;
+    if (access.actorType !== "user" || !user || !tenantId) {
+      return NextResponse.json({ error: "Necesitás una sesión activa." }, { status: 401 });
+    }
+
+    const permissions = await loadDocumentGenerationPermissions({
+      supabase, tenantId, userId: user.id, permissionSimulation: access.permissionSimulation,
+    });
+    if (!permissions.canManageTemplates) {
+      return NextResponse.json({ error: "Sin permisos para cambiar el estado de las plantillas." }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const templateId = typeof body?.templateId === "string" ? body.templateId : "";
+    const status = body?.status;
+    if (!templateId || (status !== "active" && status !== "draft")) {
+      return NextResponse.json({ error: "Elegí una plantilla y un estado válido." }, { status: 400 });
+    }
+
+    const accessFilter = `tenant_id.is.null,tenant_id.eq.${tenantId}`;
+    const { data: template, error } = await supabase.from("document_generation_templates")
+      .select("id, tenant_id, key, version, name, description, document_type, target_folder_path, schema, content_html, status")
+      .eq("id", templateId)
+      .or(accessFilter)
+      .maybeSingle();
+    if (error) throw error;
+    if (!template) return NextResponse.json({ error: "Plantilla no encontrada." }, { status: 404 });
+
+    const { data: versions, error: versionError } = await supabase.from("document_generation_templates")
+      .select("id, tenant_id, version")
+      .eq("key", template.key)
+      .or(accessFilter)
+      .order("version", { ascending: false })
+      .order("tenant_id", { nullsFirst: false })
+      .limit(1);
+    if (versionError) throw versionError;
+    if (versions[0]?.id !== template.id) {
+      return NextResponse.json({ error: "La plantilla cambió. Recargá para ver la versión actual." }, { status: 409 });
+    }
+
+    if (template.status === status) return await respondWithTemplate(supabase, tenantId, template.id);
+    const change = template.tenant_id === tenantId
+      ? supabase.from("document_generation_templates").update({ status }).eq("id", template.id).eq("tenant_id", tenantId)
+      : supabase.from("document_generation_templates").insert({
+          tenant_id: tenantId,
+          name: template.name,
+          description: template.description,
+          document_type: template.document_type,
+          target_folder_path: template.target_folder_path,
+          key: template.key,
+          version: template.version,
+          schema: template.schema,
+          content_html: template.content_html,
+          status,
+          is_system: false,
+          created_by: user.id,
+        });
+    const { data: changed, error: changeError } = await change.select("id").single();
+    if (changeError?.code === "23505") {
+      return NextResponse.json({ error: "La plantilla cambió. Recargá para ver la versión actual." }, { status: 409 });
+    }
+    if (changeError) throw changeError;
+    return await respondWithTemplate(supabase, tenantId, changed.id);
+  } catch (error) {
+    console.error("[document-generation/templates:patch]", error);
+    return NextResponse.json({ error: "No se pudo cambiar el estado de la plantilla." }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest) {
   try {
     const access = await resolveRequestAccessContext();

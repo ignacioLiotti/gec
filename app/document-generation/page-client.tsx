@@ -1494,23 +1494,11 @@ export function DocumentGenerationPageClient() {
       (config) => config.allowedDocumentTypes.length === 0 || config.allowedDocumentTypes.includes(documentType),
     );
   }, [documentType, folderConfigs]);
-  const documentTypeOptions = useMemo(() => {
-    const configuredTypes = new Set<DocumentType>();
-    for (const configuredType of folderConfigs.flatMap((config) => config.allowedDocumentTypes)) {
-      configuredTypes.add(configuredType);
-    }
-    for (const template of templateCatalog) {
-      configuredTypes.add(template.documentType);
-    }
-    if (documentType) {
-      configuredTypes.add(documentType);
-    }
-
-    return Array.from(configuredTypes).map((value) => ({
-      value,
-      label: formatDocumentTypeLabel(value),
-    }));
-  }, [documentType, folderConfigs, templateCatalog]);
+  const documentTypeOptions = useMemo(() =>
+    [...new Set(templateCatalog.map((template) => template.documentType))]
+      .map((value) => ({ value, label: formatDocumentTypeLabel(value) })),
+    [templateCatalog],
+  );
 
   const standaloneFields = useMemo(
     () => selectedTemplateFields.filter((field) => !field.repeatableGroup && field.type !== "table"),

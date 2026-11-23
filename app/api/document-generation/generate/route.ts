@@ -17,6 +17,7 @@ import {
 } from "@/lib/document-generation";
 import {
   assertWorkInTenant,
+  loadTemplates,
   canEditGeneratedDocument,
   insertGeneratedDocumentEvent,
   loadDocumentGenerationPermissions,
@@ -300,13 +301,17 @@ export async function POST(request: NextRequest) {
 
     const { data: template, error: templateError } = await supabase
       .from("document_generation_templates")
-      .select("id, name, version, document_type, target_folder_path, schema, content_html")
+      .select("id, key, name, version, document_type, target_folder_path, schema, content_html")
       .eq("id", templateId)
       .eq("status", "active")
       .maybeSingle();
     if (templateError) throw templateError;
     if (!template) {
       return NextResponse.json({ error: "No hay una plantilla activa para generar este tipo de documento." }, { status: 400 });
+    }
+
+    if (!editingGeneratedDocument && !(await loadTemplates(accessContext, template.key)).some((entry) => entry.id === templateId)) {
+      return NextResponse.json({ error: "La plantilla no está publicada para esta organización." }, { status: 409 });
     }
 
     const templateDocumentType = normalizeDocumentType(template.document_type);
