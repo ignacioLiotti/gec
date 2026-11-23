@@ -313,11 +313,14 @@ export async function POST(request: NextRequest) {
     if (typeof body.id === "string" && body.id.trim()) {
       const { data, error } = await query
         .update(payload)
+        .in("status", ["DRAFT", "READY_TO_GENERATE"])
         .eq("id", body.id.trim())
         .eq("created_by", user.id)
+        .eq("tenant_id", tenantId)
         .select("*")
         .maybeSingle();
       if (error) throw error;
+      if (!data) return NextResponse.json({ error: "El borrador ya no est? disponible para editar." }, { status: 409 });
       return NextResponse.json({ draft: data });
     }
 

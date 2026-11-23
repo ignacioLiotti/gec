@@ -9,6 +9,8 @@ import {
 } from "@/components/form-table/form-table";
 import { certificadosConfig } from "@/components/form-table/configs/certificados";
 
+import { FacturacionExport } from "./facturacion-export";
+
 export default function CertificadosPage() {
   return (
     <div className="px-4 py-2">
@@ -18,6 +20,7 @@ export default function CertificadosPage() {
             Gestión de certificados
           </p>
           <h1 className="text-3xl font-bold text-foreground mb-2">Certificados por obra</h1>
+          <FacturacionExport />
           <FormTableTabs />
           <FormTableToolbar />
           <FormTableContent className="md:max-w-[calc(98vw-var(--sidebar-current-width))]" />

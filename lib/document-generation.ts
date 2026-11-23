@@ -1,8 +1,8 @@
+import { appendPurchaseOrderSupplier } from "@/lib/purchase-order-supplier";
 import {
 	coerceValueForType,
 	evaluateTablaFormula,
 	normalizeFolderPath,
-	toNumericValue,
 	type TablaColumnDataType,
 } from "@/lib/tablas";
 
@@ -532,6 +532,21 @@ function validateTableField(
 	return errors;
 }
 
+function parseDocumentNumber(value: unknown): number | null {
+	if (typeof value === "number") return Number.isFinite(value) ? value : null;
+	if (typeof value !== "string") return null;
+	let text = value.trim();
+	if (/^[+-]?\d{1,3}(\.\d{3})+,\d+$/.test(text)) text = text.replaceAll(".", "");
+	if (!/^[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(text)) return null;
+	const parsed = Number(text.replace(",", "."));
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function evaluateDocumentTableFormula(formula: string, values: Record<string, unknown>) {
+	const scope = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, parseDocumentNumber(value) ?? value]));
+	return evaluateTablaFormula(formula, scope);
+}
+
 function validateFieldValue(
 	field: TemplateField,
 	value: unknown,
@@ -545,8 +560,8 @@ function validateFieldValue(
 		if (isEmpty) {
 			return [{ key: errorKey, message: `${field.label} es obligatorio.` }];
 		}
-		const parsed = Number(normalizedValue);
-		if (!Number.isFinite(parsed)) {
+		const parsed = parseDocumentNumber(normalizedValue);
+		if (parsed === null) {
 			return [{ key: errorKey, message: `${field.label} debe ser numerico.` }];
 		}
 		return [];
@@ -956,7 +971,7 @@ function applyRepeatableFormulaInputData(
 				for (const field of formulaFields) {
 					const formula = field.formula?.trim();
 					if (!formula || !canEvaluateTemplateFormula(formula, nextRow)) continue;
-					const computed = evaluateTablaFormula(formula, nextRow);
+					const computed = evaluateDocumentTableFormula(formula, nextRow);
 					if (computed == null) continue;
 					const nextValue = coerceTemplateFormulaValue(field, computed);
 					if (nextRow[field.key] === nextValue) continue;
@@ -1012,12 +1027,12 @@ function applyPurchaseOrderLineTotals(
 		const nextRows = rows.map((row) => {
 			if (!row || typeof row !== "object" || Array.isArray(row)) return row;
 			const rowData = row as Record<string, unknown>;
-			const quantity = toNumericValue(rowData.cantidad);
-			const unitPrice = toNumericValue(rowData.precio_unitario);
+			const quantity = parseDocumentNumber(rowData.cantidad);
+			const unitPrice = parseDocumentNumber(rowData.precio_unitario);
 			if (quantity == null || unitPrice == null) return row;
 
 			const lineTotal = roundMoney(quantity * unitPrice);
-			if (toNumericValue(rowData.precio_total) === lineTotal) return row;
+			if (parseDocumentNumber(rowData.precio_total) === lineTotal) return row;
 			rowsChanged = true;
 			return { ...rowData, precio_total: lineTotal };
 		});
@@ -1040,9 +1055,9 @@ function calculatePurchaseOrderSubtotal(
 		for (const row of rows) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) continue;
 			const rowData = row as Record<string, unknown>;
-			const explicitTotal = toNumericValue(rowData.precio_total);
-			const quantity = toNumericValue(rowData.cantidad);
-			const unitPrice = toNumericValue(rowData.precio_unitario);
+			const explicitTotal = parseDocumentNumber(rowData.precio_total);
+			const quantity = parseDocumentNumber(rowData.cantidad);
+			const unitPrice = parseDocumentNumber(rowData.precio_unitario);
 			const rowTotal =
 				explicitTotal ??
 				(quantity != null && unitPrice != null
@@ -1105,20 +1120,20 @@ function applyPurchaseOrderCalculatedInputData(
 		setValue("subtotal", subtotalFromItems);
 	}
 
-	const subtotal = toNumericValue(next.subtotal);
+	const subtotal = parseDocumentNumber(next.subtotal);
 	if (subtotal == null) return next;
 
 	const recargoPorcentaje =
-		toNumericValue(next.recargo_porcentaje) ?? 21;
+		parseDocumentNumber(next.recargo_porcentaje) ?? 21;
 	setValue("recargo_porcentaje", recargoPorcentaje);
 	setValue("recargo", roundMoney((subtotal * recargoPorcentaje) / 100));
 
-	const recargo = toNumericValue(next.recargo) ?? 0;
+	const recargo = parseDocumentNumber(next.recargo) ?? 0;
 	setValue("total_orden", roundMoney(subtotal + recargo));
 
-	const totalOrden = toNumericValue(next.total_orden);
+	const totalOrden = parseDocumentNumber(next.total_orden);
 	const bonificacionPorcentaje =
-		toNumericValue(next.bonificacion_porcentaje) ?? 0;
+		parseDocumentNumber(next.bonificacion_porcentaje) ?? 0;
 	setValue("bonificacion_porcentaje", bonificacionPorcentaje);
 	if (totalOrden != null) {
 		setValue(
@@ -1128,7 +1143,7 @@ function applyPurchaseOrderCalculatedInputData(
 	}
 
 	if (totalOrden != null) {
-		const bonificacion = toNumericValue(next.bonificacion) ?? 0;
+		const bonificacion = parseDocumentNumber(next.bonificacion) ?? 0;
 		setValue("total_a_pagar", roundMoney(totalOrden - bonificacion));
 	}
 
@@ -1163,7 +1178,7 @@ export function applyTemplateFormulaInputData(
 		for (const field of formulaFields) {
 			const formula = field.formula?.trim();
 			if (!formula || !canEvaluateTemplateFormula(formula, next)) continue;
-			const computed = evaluateTablaFormula(formula, next);
+			const computed = evaluateDocumentTableFormula(formula, next);
 			if (computed == null) continue;
 			const nextValue = coerceTemplateFormulaValue(field, computed);
 			if (next[field.key] === nextValue) continue;
@@ -1445,7 +1460,7 @@ export function renderDocumentHtml(
 			return escapeHtml(scope[token] ?? "");
 		},
 	);
-	return applyDocumentTemplateOverrides(templateHtml, renderedHtml);
+	return appendPurchaseOrderSupplier(applyDocumentTemplateOverrides(templateHtml, renderedHtml), inputData, escapeHtml);
 }
 
 export function appendApprovalSignatureHtml(
@@ -1827,7 +1842,7 @@ function applyFormulaColumns(
 				? column.config.formula.trim()
 				: "";
 		if (!formula) continue;
-		const computed = evaluateTablaFormula(formula, nextRow);
+		const computed = evaluateDocumentTableFormula(formula, nextRow);
 		nextRow[column.fieldKey] = coerceValueForType(column.dataType, computed);
 	}
 	return nextRow;

@@ -576,6 +576,25 @@ function useDocumentTemplateConfig(workId: string) {
   const [rightPanelMode, setRightPanelMode] = useState<"preview" | "fields" | "html">("preview");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishingIssuers, setPublishingIssuers] = useState(false);
+  const canPublishIssuers = templates.some((template) =>
+    template.tenantScoped && template.key === "purchase-order-default" && template.contentHtml.includes('class="company-copy"'),
+  ) && !["purchase-order-concret-libres", "purchase-order-libresmat"].every((key) => templates.some((template) => template.key === key));
+
+  async function publishIssuers() {
+    setPublishingIssuers(true);
+    try {
+      const response = await fetch("/api/document-generation/templates/issuers", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "No se pudieron publicar las variantes.");
+      setTemplates(result.templates);
+      toast.success("Plantillas de Concret y Libresmat disponibles.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron publicar las variantes.");
+    } finally {
+      setPublishingIssuers(false);
+    }
+  }
   const [creatingDocumentType, setCreatingDocumentType] = useState(false);
   const [newDocumentTypeDraft, setNewDocumentTypeDraft] = useState<NewDocumentTypeDraft>(
     createEmptyDocumentTypeDraft,
@@ -1178,6 +1197,9 @@ function useDocumentTemplateConfig(workId: string) {
     removeField,
     copyHtmlVariables,
     handleSave,
+    canPublishIssuers,
+    publishingIssuers,
+    publishIssuers,
   };
 }
 
@@ -1226,6 +1248,9 @@ export function TemplatePickerCard() {
     creatingDocumentType,
     handleTemplateSelect,
     startDocumentTypeCreation,
+    canPublishIssuers,
+    publishingIssuers,
+    publishIssuers,
   } = useTemplateConfig();
 
   return (
@@ -1257,6 +1282,11 @@ export function TemplatePickerCard() {
           </div>
         ) : null}
 
+        {canPublishIssuers ? (
+          <Button type="button" variant="secondary" disabled={publishingIssuers} onClick={() => void publishIssuers()}>
+            {publishingIssuers ? "Publicando?" : "Publicar plantillas de Concret y Libresmat"}
+          </Button>
+        ) : null}
         {creatingDocumentType ? <NewDocumentTypeCreator /> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

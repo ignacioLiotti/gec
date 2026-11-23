@@ -1,5 +1,7 @@
 "use client";
 
+import { fetchDocumentMutation } from "@/lib/document-generation-fetch";
+import { PURCHASE_ORDER_SUPPLIER_FIELDS } from "@/lib/purchase-order-supplier";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent as ReactFocusEvent, type FormEvent, type MutableRefObject } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -585,8 +587,8 @@ function renderInlineFieldControl(
     return `<select class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}">${options}</select>`;
   }
 
-  const inputType = field.type === "date" ? "date" : field.type === "number" ? "number" : "text";
-  const inputMode = field.type === "money" ? `inputmode="decimal"` : "";
+  const inputType = field.type === "date" ? "date" : "text";
+  const inputMode = field.type === "money" || field.type === "number" ? `inputmode="decimal"` : "";
   return `<input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" ${inputMode} value="${currentValue}" />`;
 }
 
@@ -1075,6 +1077,7 @@ function TextInput({
   mono,
   error,
   type = "text",
+  inputMode,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1083,6 +1086,7 @@ function TextInput({
   mono?: boolean;
   error?: boolean;
   type?: "text" | "number" | "date";
+  inputMode?: "decimal";
 }) {
   return (
     <div className="relative">
@@ -1093,6 +1097,8 @@ function TextInput({
       ) : null}
       <input
         type={type}
+        step={type === "number" ? "any" : undefined}
+        inputMode={inputMode}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -1472,7 +1478,13 @@ export function DocumentGenerationPageClient() {
     [templateId, templates],
   );
   const selectedTemplateFields = useMemo(
-    () => selectedTemplate?.schema.fields.map((field) => resolveFieldDynamicOptions(field, dynamicOptions)) ?? [],
+    () => {
+      if (!selectedTemplate) return [];
+      const fields = selectedTemplate.schema.fields;
+      const purchaseOrder = selectedTemplate.documentType === "PURCHASE_ORDER" || selectedTemplate.documentType === "ORDEN_DE_COMPRA_V2";
+      const supplier = purchaseOrder ? PURCHASE_ORDER_SUPPLIER_FIELDS.filter((field) => !fields.some((existing) => existing.key === field.key)) : [];
+      return [...fields, ...supplier].map((field) => resolveFieldDynamicOptions(field, dynamicOptions));
+    },
     [dynamicOptions, selectedTemplate],
   );
 
@@ -1967,10 +1979,10 @@ export function DocumentGenerationPageClient() {
     options?: { applyServerInput?: boolean },
   ) => {
       const requestContextVersion = draftContextVersionRef.current;
-      const response = await fetch("/api/document-generation/drafts", {
+      const response = await fetchDocumentMutation("/api/document-generation/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        keepalive: true,
+
         body: JSON.stringify({
           id: draftIdRef.current || undefined,
           workId: target.workId,
@@ -2002,6 +2014,8 @@ export function DocumentGenerationPageClient() {
   useEffect(() => {
     if (
       loading ||
+      savingDraft ||
+      generating ||
       editingGeneratedId ||
       documentType !== "PURCHASE_ORDER" ||
       !workId ||
@@ -2052,7 +2066,7 @@ export function DocumentGenerationPageClient() {
     }, PURCHASE_ORDER_AUTOSAVE_DELAY_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [autosaveRevision, documentType, editingGeneratedId, folderPath, loading, persistDraft, templateId, workId, inputData]);
+  }, [autosaveRevision, documentType, editingGeneratedId, folderPath, loading, persistDraft, templateId, workId, inputData, savingDraft, generating]);
 
   const handleSaveDraft = async () => {
     flushInlineDraftData();
@@ -2073,15 +2087,18 @@ export function DocumentGenerationPageClient() {
     }
 
     setSavingDraft(true);
+    const contextVersion = draftContextVersionRef.current;
     try {
+      await autosaveRequestRef.current;
+      if (contextVersion !== draftContextVersionRef.current) return;
       const persistedDraft = await persistDraft(currentInputData, {
         workId,
         folderPath,
         documentType,
         templateId,
-      });
+      }, { applyServerInput: false });
       if (!persistedDraft.applied) return;
-      purchaseOrderDraftDirtyRef.current = false;
+      if (inlineInputDataRef.current === currentInputData) purchaseOrderDraftDirtyRef.current = false;
       await persistCreatableOptions(persistedDraft.inputData);
       toast.success("Borrador guardado.");
     } catch (error) {
@@ -2113,12 +2130,20 @@ export function DocumentGenerationPageClient() {
     }
 
     setGenerating(true);
+    const contextVersion = draftContextVersionRef.current;
     try {
-      const response = await fetch("/api/document-generation/generate", {
+      await autosaveRequestRef.current;
+      if (contextVersion !== draftContextVersionRef.current) return;
+      const generatingDraftId = draftIdRef.current;
+      if (generatingDraftId && !editingGeneratedId) {
+        const saved = await persistDraft(currentInputData, { workId, folderPath, documentType, templateId }, { applyServerInput: false });
+        if (!saved.applied) return;
+      }
+      const response = await fetchDocumentMutation("/api/document-generation/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          draftId: draftId || undefined,
+          draftId: generatingDraftId || undefined,
           generatedDocumentId: editingGeneratedId || undefined,
           workId,
           folderPath,
@@ -2249,7 +2274,10 @@ export function DocumentGenerationPageClient() {
         onChange={onChange}
         placeholder={`Completar ${field.label.toLowerCase()}`}
         mono={field.type === "money" || field.type === "number"}
-        type={field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : "text"}
+        type={field.type === "date" ? "date" :
+          (field.type === "number" || field.type === "money") &&
+          documentType !== "PURCHASE_ORDER" && documentType !== "ORDEN_DE_COMPRA_V2" ? "number" : "text"}
+        inputMode={field.type === "number" || field.type === "money" ? "decimal" : undefined}
         icon={field.type === "date" ? <CalendarDays className="size-3.5" /> : undefined}
       />
     );

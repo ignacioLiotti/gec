@@ -660,7 +660,8 @@ export function resolveGenerationContext(args: {
     filteredTemplates.length === 1
       ? filteredTemplates[0]
       : resolvedFolderPath
-        ? filteredTemplates.find((template) => template.targetFolderPath === resolvedFolderPath) ?? null
+        ? filteredTemplates.find((template) => template.key === "purchase-order-default" && template.targetFolderPath === resolvedFolderPath)
+          ?? filteredTemplates.find((template) => template.targetFolderPath === resolvedFolderPath) ?? null
         : null;
 
   return {

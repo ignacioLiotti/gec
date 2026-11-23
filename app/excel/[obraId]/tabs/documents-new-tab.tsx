@@ -767,7 +767,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const searchParams = useSearchParams();
-	const selectedFolderPath = normalizePath(searchParams.get("folder") ?? "");
+	const requestedFile = searchParams.get("file") ?? "";
+	const relativeRequestedFile = requestedFile.startsWith(obraId + "/") ? requestedFile.slice(obraId.length + 1) : requestedFile;
+	const selectedFolderPath = normalizePath(searchParams.get("folder") ?? relativeRequestedFile.split("/").slice(0, -1).join("/"));
+	const openedLinkRef = useRef("");
 	const [search, setSearch] = useState("");
 	const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_FILES);
 	const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -1128,7 +1131,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 
 	function updateFolderPath(nextFolderPath: string) {
 		const params = new URLSearchParams(searchParams?.toString?.() || "");
-		params.set("tab", "documentos-new");
+		params.set("tab", "documentos");
 		params.delete("file");
 		const normalizedNextFolderPath = normalizePath(nextFolderPath);
 		if (normalizedNextFolderPath) {
@@ -1593,6 +1596,18 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		[clearUploadPreview, obraId, signedUrls],
 	);
 
+	useEffect(() => {
+		if (!relativeRequestedFile) {
+			openedLinkRef.current = "";
+			return;
+		}
+		if (openedLinkRef.current === relativeRequestedFile) return;
+		const match = files.find((item) => item.storagePath === obraId + "/" + relativeRequestedFile);
+		if (!match) return;
+		openedLinkRef.current = relativeRequestedFile;
+		void handleOpenDocumentPreview(match);
+	}, [files, handleOpenDocumentPreview, obraId, relativeRequestedFile]);
+
 	const handleDocumentSheetOpenChange = useCallback((open: boolean) => {
 		setIsDocumentSheetOpen(open);
 		if (!open) {
@@ -1610,7 +1625,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	}, [documentDataTableConfig]);
 
 	const resolveDeleteStoragePath = useCallback((item: FileSystemItem) => {
-		if (item.storagePath) return normalizeFolderPath(item.storagePath);
+		if (item.storagePath) return item.storagePath;
 		const relativePath = getRelativeFolderPath(item);
 		if (!relativePath) return item.type === "folder" ? obraId : "";
 		return normalizeFolderPath(`${obraId}/${relativePath}`);
@@ -1993,7 +2008,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	);
 
 	return (
-		<TabsContent value="documentos-new" className="space-y-4 ">
+		<TabsContent value="documentos" className="space-y-4 ">
 			<section className={cn("min-h-[640px] overflow-hidden rounded-xl ", !isOcrFolder && "rounded-xl ")}>
 				<div className="-mb-1 mx-[1px]">
 					{isOcrFolder ? ocrHeader : normalHeader}
