@@ -92,8 +92,8 @@ const DOCUMENT_PREVIEW_ZOOM_STEP = 0.1;
 const VIEWER_CONTROL_BUTTON_CLASS =
   "transition-[background-color,box-shadow,transform,color] duration-150 active:translate-y-px disabled:opacity-60";
 
-async function fetchApprovedDocuments() {
-  const response = await fetch("/api/document-generation/generated?status=APPROVED&summary=1", {
+async function fetchApprovedDocuments(query: string) {
+  const response = await fetch("/api/document-generation/generated?status=APPROVED&summary=1&q=" + encodeURIComponent(query), {
     cache: "no-store",
   });
   const payload = (await response.json().catch(() => ({}))) as ApprovedDocumentsResponse;
@@ -120,12 +120,6 @@ function getDocumentTitle(document: ApprovedDocumentItem) {
   return document.fileName || document.templateName || formatDocumentType(document.documentType);
 }
 
-function normalizeSearchValue(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
 
 function groupApprovedDocuments(documents: ApprovedDocumentItem[]) {
   const typeMap = new Map<string, Map<string, WorkGroup>>();
@@ -698,8 +692,8 @@ export function ApprovedDocumentsPageClient() {
   const previewByIdRef = useRef<Record<string, string>>({});
   const previewRequestByIdRef = useRef<Map<string, Promise<string>>>(new Map());
   const approvedDocumentsQuery = useQuery({
-    queryKey: ["document-generation", "generated", "approved"],
-    queryFn: fetchApprovedDocuments,
+    queryKey: ["document-generation", "generated", "approved", deferredSearch.trim()],
+    queryFn: () => fetchApprovedDocuments(deferredSearch.trim()),
     staleTime: 60 * 1000,
   });
 
@@ -817,24 +811,8 @@ export function ApprovedDocumentsPageClient() {
     const viewDocuments = documentsWithPreviews.filter((document) =>
       activeView === "resolved" ? resolvedIds.has(document.id) : !resolvedIds.has(document.id),
     );
-    const query = normalizeSearchValue(deferredSearch.trim());
-    if (!query) return viewDocuments;
-    return viewDocuments.filter((document) =>
-      normalizeSearchValue(
-        [
-          document.fileName,
-          document.templateName,
-          document.documentType,
-          formatDocumentType(document.documentType),
-          document.workLabel,
-          document.folderPath,
-          document.createdBy?.label,
-        ]
-          .filter(Boolean)
-          .join(" "),
-      ).includes(query),
-    );
-  }, [activeView, deferredSearch, documentsWithPreviews, resolvedIds]);
+    return viewDocuments;
+  }, [activeView, documentsWithPreviews, resolvedIds]);
   const groupedDocuments = useMemo(() => groupApprovedDocuments(filteredDocuments), [filteredDocuments]);
   const selectedDocument = useMemo(
     () => documentsWithPreviews.find((document) => document.id === selectedDocumentId) ?? null,

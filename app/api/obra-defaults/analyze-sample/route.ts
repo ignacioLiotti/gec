@@ -528,6 +528,11 @@ export async function POST(request: NextRequest) {
 		}
 
 		const form = await request.formData();
+		const note = form.get("note");
+		const focus = typeof note === "string" ? note.trim().slice(0, 900) : "";
+		const prompt = focus
+			? `${ANALYSIS_PROMPT}\n\nEl usuario quiere revisar esto en su muestra. Usalo como foco dentro del esquema y verificá cada propuesta contra la evidencia del archivo.\n${JSON.stringify(focus)}`
+			: ANALYSIS_PROMPT;
 		const fileEntry = form.get("file");
 		const file = fileEntry instanceof File ? fileEntry : null;
 		if (!file) {
@@ -550,7 +555,7 @@ export async function POST(request: NextRequest) {
 		let parts: GeminiPart[];
 		if (isDocumentMime(mime)) {
 			parts = [
-				{ text: ANALYSIS_PROMPT },
+				{ text: prompt },
 				{
 					inline_data: {
 						mime_type: mime,
@@ -567,7 +572,7 @@ export async function POST(request: NextRequest) {
 				);
 			}
 			parts = [
-				{ text: ANALYSIS_PROMPT },
+				{ text: prompt },
 				{
 					text: `El documento es una planilla ("${fileName}"). Contenido por hoja, celdas separadas con " | ":\n\n${spreadsheetText}`,
 				},

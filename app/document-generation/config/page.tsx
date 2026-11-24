@@ -1,3 +1,8 @@
+import Link from "next/link";
+import { LayoutTemplate } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+
 import { resolveDocumentAccess } from "../document-access";
 import { DocumentGenerationShell } from "../document-shell";
 import { TemplateConfigPanel } from "../template-config-panel";
@@ -17,7 +22,17 @@ export default async function DocumentGenerationConfigPage() {
     <DocumentGenerationShell permissions={access.permissions}>
       <div className="px-4 py-6 sm:px-6">
         {access.permissions.canManageTemplates ? (
-          <TemplateConfigPanel workId="" />
+          <>
+            <div className="mb-4 flex justify-end">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/document-generation/builder">
+                  <LayoutTemplate className="size-4" />
+                  Editor visual de plantillas
+                </Link>
+              </Button>
+            </div>
+            <TemplateConfigPanel workId="" />
+          </>
         ) : (
           <div className="rounded-xl border border-stone-200 bg-white p-6 text-sm text-stone-600">
             No tienes permisos para editar configuracion de plantillas.

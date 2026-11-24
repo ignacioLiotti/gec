@@ -191,6 +191,25 @@ describe("document-generation helpers", () => {
     });
   });
 
+  it.each(["1.234", "1,234"])("preserves decimal precision in purchase order quantities (%s)", (quantity) => {
+    const totals = ["subtotal", "recargo_porcentaje", "recargo", "total_orden", "bonificacion_porcentaje", "bonificacion", "total_a_pagar"];
+    const schema = {
+      fields: [
+        ...totals.map((key) => ({ key, label: key, type: "money" as const, required: false })),
+        {
+          key: "items", label: "Ítems", type: "table" as const, required: true,
+          columns: [
+            { key: "cantidad", label: "Cantidad", type: "number" as const, required: true },
+            { key: "precio_unitario", label: "Precio", type: "money" as const, required: true },
+          ],
+        },
+      ],
+    };
+    const input = { items: [{ cantidad: quantity, precio_unitario: "100" }], recargo_porcentaje: 0 };
+    expect(validateTemplateInput(schema, input)).toEqual([]);
+    expect(applyTemplateFormulaInputData(schema, input)).toMatchObject({ total_a_pagar: 123.4 });
+  });
+
   it("hydrates default values from schema", () => {
     const schema = normalizeTemplateSchema({
       fields: [

@@ -41,6 +41,7 @@ const templateSummarySchema = z.object({
 	targetFolderPath: z.string().nullable(),
 	status: z.string(),
 	tenantScoped: z.boolean(),
+	version: z.number(),
 	schema: z.object({
 		fields: z.array(templateFieldSchema),
 		documentNumberFieldKey: z.string().nullable().optional(),
@@ -272,6 +273,33 @@ async function readDraft(request: APIRequestContext, draftId: string) {
 	expect(response.status()).toBe(200);
 	return draftDetailResponseSchema.parse(await response.json()).draft;
 }
+
+test("publishing guided purchase order settings keeps the original template version", async ({ scenario }) => {
+	test.setTimeout(120_000);
+	const owner = await scenario.actor("owner");
+	const catalogResponse = await owner.request.get("/api/document-generation/templates");
+	expect(catalogResponse.ok()).toBe(true);
+	const { templates } = templateCatalogResponseSchema.parse(await catalogResponse.json());
+	const original = templates.find((entry) => entry.documentType === "PURCHASE_ORDER");
+	if (!original?.schema.fields.length) throw new Error("Missing purchase order template fixture.");
+	const field = original.schema.fields[0];
+	const page = await owner.context.newPage();
+	await page.goto("/document-generation/config");
+	await page.getByRole("button").filter({ hasText: original.name }).first().click({ timeout: 45_000 });
+	const checkbox = page.getByRole("checkbox", { name: field.label, exact: true });
+	await checkbox.setChecked(!field.required);
+	await expect(page.getByTitle("Vista previa de la orden de compra con datos de ejemplo")).toBeVisible();
+	await page.getByRole("button", { name: "Publicar nueva versión" }).click();
+	await expect(page.getByText("Template guardada para este tenant.")).toBeVisible();
+
+	const updated = await owner.request.get("/api/document-generation/templates");
+	expect(updated.ok()).toBe(true);
+	const { templates: versions } = templateCatalogResponseSchema.parse(await updated.json());
+	const copy = versions.find((entry) => entry.documentType === "PURCHASE_ORDER" && entry.id !== original.id);
+	expect(copy?.version).toBe(original.version + 1);
+	expect(copy?.schema.fields.find((entry) => entry.key === field.key)?.required).toBe(!field.required);
+	expect(versions.find((entry) => entry.id === original.id)?.schema.fields).toEqual(original.schema.fields);
+});
 
 test("owner creates, edits and reloads a typed template, then the generator renders and saves its inputs", async ({
 	scenario,

@@ -174,6 +174,10 @@ type InsurancePolicyPreviewRow = {
   errors: string[];
 };
 
+function createMacroFilters(): MacroTableFilters {
+  return {};
+}
+
 function getActiveMacroFilters(filters: MacroTableFilters | undefined): MacroTableFilters {
   if (!filters) return {};
 
@@ -1404,7 +1408,7 @@ function MacroTablePanel({
         : "Buscar certificados, obras o estados...",
       defaultPageSize: 50,
       pageSizeOptions: [25, 50, 100],
-      createFilters: () => ({}),
+      createFilters: createMacroFilters,
       renderFilters: (props: FilterRendererProps<MacroTableFilters>) => (
         <MacroFiltersContent {...props} columns={displayColumns} />
       ),

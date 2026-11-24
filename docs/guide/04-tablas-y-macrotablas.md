@@ -23,6 +23,8 @@ Una **macrotabla** consolida la misma tabla a través de todas las obras (por ej
 - Filtrá por obra, período o cualquier columna.
 - **Valores personalizados**: podés sobrescribir un valor puntual en la macrotabla sin tocar el dato original de la obra. La permanencia después de reimportar depende de que la fila tenga lineage estable; revisá los overrides luego de una reextracción.
 - Si detectás valores en competencia después de una reimportación, revisalos antes de exportar o decidir.
+- El modelo **Certificados - Contable** toma las tablas PMC Resumen configuradas por plantilla. Incluye campos propios para el seguimiento contable.
+- Una automatización que usa una macrotabla toma los datos de origen de la obra. Para corregir un valor que alimenta General, corregí el dato en su tabla de origen.
 
 ## Cálculos e indicadores
 

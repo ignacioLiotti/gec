@@ -1081,6 +1081,10 @@ export function ObraGeneralTab({
 	const curveHasSinglePlanPoint =
 		reportsData?.curve != null &&
 		curvePlanPointsCount === 1;
+	const curveMissingSources = [
+		!curveImportConfig?.curvaPlanTableId ? "Curva Plan" : null,
+		!curveImportConfig?.pmcResumenTableId ? "PMC Resumen" : null,
+	].filter(Boolean);
 	const curveBaseMonthCount = Math.round(Number(form.state.values.plazoTotal ?? 0));
 	const canCreateBaseCurve =
 		Boolean(curveImportConfig?.curvaPlanTableId) &&
@@ -2058,14 +2062,14 @@ export function ObraGeneralTab({
 									data-wizard-target="obra-curva-avance"
 								>
 									<ShellCard
-										title="Curva de avance"
+										title="Curva de avance físico"
 										icon={LineChartIcon}
 										bodyClassName="p-4"
 										action={
 											<div className="flex items-center gap-3">
 												{reportsData?.curve ? (
-													<p className="text-[11px] text-[#bbb]">
-														{reportsData.curve.planTableName} vs {reportsData.curve.resumenTableName}
+													<p className="text-xs text-muted-foreground">
+														Planificado · {reportsData.curve.planTableName} / Real · {reportsData.curve.resumenTableName}
 													</p>
 												) : null}
 												{curveImportConfig ? (
@@ -2128,7 +2132,9 @@ export function ObraGeneralTab({
 										) : (
 											<div className="flex h-[274px] flex-col rounded-lg border border-dashed border-[#e8e8e8] p-4">
 												<div className="rounded-lg border border-[#f0f0f0] px-4 py-3 text-[13px] text-[#bbb]">
-													No se detectaron tablas Curva Plan + PMC Resumen con datos suficientes.
+													{curveMissingSources.length
+														? `Falta cargar la fuente ${curveMissingSources.join(" y ")} para comparar el avance.`
+														: "Cargá períodos con avance físico en Curva Plan y PMC Resumen para ver la comparación."}
 												</div>
 												<div className="mt-4 flex-1 rounded-lg bg-[linear-gradient(to_right,rgba(240,240,240,0.6)_1px,transparent_1px),linear-gradient(to_bottom,rgba(240,240,240,0.6)_1px,transparent_1px)] bg-[size:24px_24px]" />
 											</div>

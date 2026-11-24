@@ -335,6 +335,7 @@ export async function POST(request: NextRequest) {
         .select("id")
         .eq("id", draftId)
         .eq("created_by", user.id)
+        .eq("tenant_id", tenantId)
         .maybeSingle();
       if (knownDraftError) throw knownDraftError;
       if (!knownDraft) {
@@ -343,8 +344,10 @@ export async function POST(request: NextRequest) {
 
       const { data, error } = await query
         .update(payload)
+        .in("status", ["DRAFT", "READY_TO_GENERATE"])
         .eq("id", draftId)
         .eq("created_by", user.id)
+        .eq("tenant_id", tenantId)
         .eq("updated_at", expectedUpdatedAt)
         .select("*")
         .maybeSingle();

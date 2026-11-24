@@ -18,8 +18,14 @@ const redisClient =
 		? new Redis({
 				url: upstashRedisUrl,
 				token: upstashRedisToken,
+				// The limiter fails open, so an unreachable Redis must not hold the
+				// request: the default 5 retries add ~4.3 s to every API call.
+				retry: { retries: 1, backoff: () => 50 },
 		  })
 		: null;
+
+// Fail open (allow the request) when Redis is slow instead of after 5 s.
+const LIMITER_TIMEOUT_MS = 1000;
 
 const ipLimit = Number.parseInt(process.env.RATE_LIMIT_IP ?? "120", 10);
 const ipWindow = (process.env.RATE_LIMIT_IP_WINDOW ?? "1m") as any;
@@ -33,6 +39,7 @@ const ipLimiter =
 				redis: redisClient,
 				limiter: Ratelimit.slidingWindow(ipLimit, ipWindow),
 				prefix: "mt:rate:ip",
+				timeout: LIMITER_TIMEOUT_MS,
 		  })
 		: null;
 
@@ -42,6 +49,7 @@ const tenantLimiter =
 				redis: redisClient,
 				limiter: Ratelimit.slidingWindow(tenantLimit, tenantWindow),
 				prefix: "mt:rate:tenant",
+				timeout: LIMITER_TIMEOUT_MS,
 		  })
 		: null;
 

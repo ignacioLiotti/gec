@@ -12,6 +12,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { resolveMacroSourceTablas, type MacroSourceTablaRecord } from "@/lib/macro-table-source-selection";
 import { evaluateMathExpression } from "@/lib/safe-math-expression";
 import { toNumericValue as parseNumericValue } from "@/lib/tablas";
 
@@ -1186,7 +1187,7 @@ export async function listTenantDataFlowSources({
 
   const { data: macroTablesRaw, error: macroTablesError } = await supabase
     .from("macro_tables")
-    .select("id, name, created_at")
+    .select("id, name, settings, created_at")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: true });
   if (macroTablesError) throw macroTablesError;
@@ -1475,7 +1476,7 @@ export async function listObraDataFlowSources({
 }): Promise<DataFlowBuilderSources> {
   const { data: tablas, error: tablasError } = await supabase
     .from("obra_tablas")
-    .select("id, name, created_at")
+    .select("id, name, settings, created_at")
     .eq("obra_id", obraId)
     .order("created_at", { ascending: true });
 
@@ -1508,27 +1509,16 @@ export async function listObraDataFlowSources({
     columns: columnsByTableId.get(table.id as string) ?? [],
   }));
 
-  const { data: macroSources, error: macroSourcesError } = tableIds.length
-    ? await supabase
-        .from("macro_table_sources")
-        .select(`
-          macro_table_id,
-          obra_tabla_id,
-          macro_tables!inner(id, tenant_id, name)
-        `)
-        .in("obra_tabla_id", tableIds)
-    : { data: [], error: null };
-
-  if (macroSourcesError) throw macroSourcesError;
-
-  const macroTableIds = [...new Set((macroSources ?? []).map((source) => source.macro_table_id as string))];
-  const macroNameById = new Map<string, string>();
-  for (const source of macroSources ?? []) {
-    const macro = Array.isArray(source.macro_tables) ? source.macro_tables[0] : source.macro_tables;
-    if (!macro) continue;
-    if (macro.tenant_id !== tenantId) continue;
-    macroNameById.set(macro.id as string, macro.name as string);
-  }
+  const macroSources = tableIds.length
+    ? await loadBuilderMacroSourceIds(supabase, tenantId, obraId, (tablas ?? []).map((tabla) => ({
+      id: tabla.id as string,
+      name: tabla.name as string,
+      obraId,
+      defaultTablaId: asString(asRecord(tabla.settings).defaultTablaId) || null,
+    })))
+    : [];
+  const applicableMacros = macroSources.filter((macro) => macro.sourceIds.length > 0);
+  const macroTableIds = applicableMacros.map((macro) => macro.id);
 
   const macroColumnsById = new Map<string, DataFlowBuilderSourceColumn[]>();
   if (macroTableIds.length > 0) {
@@ -1553,13 +1543,11 @@ export async function listObraDataFlowSources({
     }
   }
 
-  const macroTables: DataFlowBuilderMacroSource[] = macroTableIds
-    .filter((macroId) => macroNameById.has(macroId))
-    .map((macroId) => ({
-      id: macroId,
-      name: macroNameById.get(macroId) ?? macroId,
-      columns: macroColumnsById.get(macroId) ?? [],
-    }));
+  const macroTables: DataFlowBuilderMacroSource[] = applicableMacros.map((macro) => ({
+    id: macro.id,
+    name: macro.name,
+    columns: macroColumnsById.get(macro.id) ?? [],
+  }));
 
   const { data: obra, error: obraError } = await supabase
     .from("obras")
@@ -1580,6 +1568,53 @@ export async function listObraDataFlowSources({
     }),
   };
 }
+
+async function loadBuilderMacroSourceIds(
+  supabase: SupabaseClient,
+  tenantId: string,
+  obraId: string,
+  candidateTablas: MacroSourceTablaRecord[],
+  onlyMacroIds?: string[],
+) {
+  let query = supabase.from("macro_tables").select("id, name, settings").eq("tenant_id", tenantId);
+  if (onlyMacroIds) query = query.in("id", onlyMacroIds);
+  const { data: macros, error } = await query;
+  if (error) throw error;
+  if (!macros?.length) return [];
+
+  const { data: explicit, error: sourceError } = await supabase
+    .from("macro_table_sources")
+    .select("macro_table_id, obra_tablas!inner(id, name, obra_id, settings, obras!inner(tenant_id))")
+    .eq("obra_tablas.obras.tenant_id", tenantId)
+    .in("macro_table_id", macros.map((macro) => macro.id as string));
+  if (sourceError) throw sourceError;
+
+  const explicitByMacroId = new Map<string, MacroSourceTablaRecord[]>();
+  for (const link of explicit ?? []) {
+    const tabla = asRecord(Array.isArray(link.obra_tablas) ? link.obra_tablas[0] : link.obra_tablas);
+    if (!tabla.id) continue;
+    const macroId = link.macro_table_id as string;
+    const sources = explicitByMacroId.get(macroId) ?? [];
+    sources.push({
+      id: asString(tabla.id),
+      name: asString(tabla.name),
+      obraId: asString(tabla.obra_id),
+      defaultTablaId: asString(asRecord(tabla.settings).defaultTablaId) || null,
+    });
+    explicitByMacroId.set(macroId, sources);
+  }
+
+  return macros.map((macro) => ({
+    id: macro.id as string,
+    name: macro.name as string,
+    sourceIds: resolveMacroSourceTablas({
+      settings: macro.settings,
+      explicitSourceTablas: explicitByMacroId.get(macro.id as string) ?? [],
+      candidateTablas,
+    }).filter((tabla) => tabla.obraId === obraId).map((tabla) => tabla.id),
+  }));
+}
+
 
 export async function evaluateObraDataFlowBuilder({
   supabase,
@@ -1645,59 +1680,23 @@ export async function evaluateObraDataFlowBuilder({
   }
 
   const rowsByTableId = new Map<string, BuilderRowRecord[]>();
-  const allTableIds = [...tableIds];
-
-  if (allTableIds.length > 0) {
-    const { data: rows, error: rowsError } = await supabase
-      .from("obra_tabla_rows")
-      .select("id, tabla_id, data, created_at")
-      .in("tabla_id", allTableIds);
-    if (rowsError) throw rowsError;
-    for (const row of rows ?? []) {
-      const tableId = row.tabla_id as string;
-      if (!rowsByTableId.has(tableId)) rowsByTableId.set(tableId, []);
-      rowsByTableId.get(tableId)?.push({
-        id: row.id as string,
-        tabla_id: tableId,
-        created_at: (row.created_at as string | null) ?? null,
-        data:
-          row.data && typeof row.data === "object" && !Array.isArray(row.data)
-            ? (row.data as Record<string, unknown>)
-            : {},
-      });
-    }
-  }
-
+  const candidateTablas: MacroSourceTablaRecord[] = (obraTables ?? []).map((table) => ({
+    id: table.id as string,
+    name: table.name as string,
+    obraId,
+    defaultTablaId: asString(asRecord(table.settings).defaultTablaId) || null,
+  }));
   const macroTableToSourceIds = new Map<string, string[]>();
   if (macroIds.size > 0) {
-    const { data: macroSources, error: macroSourcesError } = await supabase
-      .from("macro_table_sources")
-      .select(`
-        macro_table_id,
-        obra_tabla_id,
-        obra_tablas!inner(id, obra_id, obras!inner(tenant_id))
-      `)
-      .in("macro_table_id", [...macroIds]);
-    if (macroSourcesError) throw macroSourcesError;
-
-    for (const source of macroSources ?? []) {
-      const tabla = Array.isArray(source.obra_tablas) ? source.obra_tablas[0] : source.obra_tablas;
-      const obraRef = tabla && typeof tabla === "object" ? (tabla as { obra_id?: unknown; obras?: unknown }) : {};
-      const obraNested = Array.isArray(obraRef.obras) ? obraRef.obras[0] : obraRef.obras;
-      const tenantRef =
-        obraNested && typeof obraNested === "object" ? (obraNested as { tenant_id?: unknown }) : {};
-      if (obraRef.obra_id !== obraId || tenantRef.tenant_id !== tenantId) continue;
-
-      const macroId = source.macro_table_id as string;
-      if (!macroTableToSourceIds.has(macroId)) macroTableToSourceIds.set(macroId, []);
-      macroTableToSourceIds.get(macroId)?.push(source.obra_tabla_id as string);
-      if (!rowsByTableId.has(source.obra_tabla_id as string)) {
-        tableIds.add(source.obra_tabla_id as string);
-      }
+    const sources = await loadBuilderMacroSourceIds(supabase, tenantId, obraId, candidateTablas, [...macroIds]);
+    for (const macro of sources) {
+      macroTableToSourceIds.set(macro.id, macro.sourceIds);
+      for (const id of macro.sourceIds) tableIds.add(id);
     }
   }
 
-  const missingTableRows = [...tableIds].filter((tableId) => !rowsByTableId.has(tableId));
+  const scopedTableIds = new Set(candidateTablas.map((table) => table.id));
+  const missingTableRows = [...tableIds].filter((tableId) => scopedTableIds.has(tableId));
   if (missingTableRows.length > 0) {
     const { data: rows, error: rowsError } = await supabase
       .from("obra_tabla_rows")

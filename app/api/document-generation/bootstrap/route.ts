@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
 
     const folderConfigs = await loadFolderGenerationConfigs(accessContext, workId);
     const context = resolveGenerationContext({
+      preferredTemplateId: request.nextUrl.searchParams.get("templateId"),
       documentType,
       folderPath,
       folderConfigs,

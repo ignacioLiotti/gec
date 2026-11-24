@@ -91,7 +91,8 @@ export async function GET(request: Request, context: RowsContext) {
 			)
 			.eq("tabla_id", tablaId)
 			.order("created_at", { ascending: false })
-			.range(from, to);
+			.order("id", { ascending: false })
+			.range(from, includeCount ? to : to + 1);
 		if (docPath) {
 			rowsQuery = rowsQuery.contains("data", { __docPath: docPath });
 		}
@@ -115,10 +116,10 @@ export async function GET(request: Request, context: RowsContext) {
 			? count
 				? to + 1 < count
 				: false
-			: (data?.length ?? 0) === limit;
+			: (data?.length ?? 0) > limit;
 
 		return NextResponse.json({
-			rows: data ?? [],
+			rows: includeCount ? (data ?? []) : (data ?? []).slice(0, limit),
 			pagination: {
 				page,
 				limit,

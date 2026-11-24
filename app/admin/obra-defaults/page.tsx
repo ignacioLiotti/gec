@@ -377,7 +377,7 @@ function buildCertificadoRecipeTables(): ExtractedTableConfig[] {
   return [
     {
       id: crypto.randomUUID(),
-      name: "resumen",
+      name: "PMC Resumen",
       rowMode: "single",
       maxRows: 1,
       dataInputMethod: "both",
@@ -388,7 +388,7 @@ function buildCertificadoRecipeTables(): ExtractedTableConfig[] {
       hasNestedData: false,
       documentTypes: ["certificado", "resumen de certificado"],
       extractionInstructions:
-        "Extrae una sola fila por certificado. Si el documento tiene varias paginas o varios certificados, separa cada certificado y usa solo las paginas que correspondan a este resumen.",
+        "Extrae una fila de resumen por certificado y usa solo sus páginas. Distingue el importe del período del importe acumulado histórico. El avance físico acumulado es un porcentaje de ejecución, no la proporción del monto pagado. Si un dato no aparece, déjalo vacío.",
       columns: [
         createRecipeColumn({
           label: "Nro certificado",
@@ -396,16 +396,38 @@ function buildCertificadoRecipeTables(): ExtractedTableConfig[] {
           description: "Identificador unico del certificado.",
         }),
         createRecipeColumn({
-          label: "Fecha",
-          fieldKey: "fecha",
+          label: "Fecha de certificación",
+          fieldKey: "fecha_certificacion",
           dataType: "date",
           description: "Fecha del certificado o de certificacion.",
         }),
         createRecipeColumn({
-          label: "Monto total",
-          fieldKey: "monto_total",
+          label: "Monto del período",
+          fieldKey: "monto_certificado",
           dataType: "currency",
-          description: "Monto total certificado en el documento.",
+          description: "Importe certificado en el período de este documento, sin acumulados previos.",
+        }),
+        createRecipeColumn({
+          label: "Monto acumulado",
+          fieldKey: "monto_acumulado",
+          dataType: "currency",
+          description: "Importe total certificado desde el inicio de obra hasta el período actual.",
+        }),
+        createRecipeColumn({
+          label: "Avance físico acumulado (%)",
+          fieldKey: "avance_fisico_acumulado_pct",
+          dataType: "number",
+          description: "Porcentaje acumulado de ejecución física. Por ejemplo, 25 para un avance de 25%.",
+        }),
+        createRecipeColumn({
+          label: "Período",
+          fieldKey: "periodo",
+          description: "Mes o período de certificación informado en el documento.",
+        }),
+        createRecipeColumn({
+          label: "Expediente",
+          fieldKey: "expediente",
+          description: "Referencia administrativa del certificado, cuando esté disponible.",
         }),
       ],
     },
@@ -2477,6 +2499,7 @@ export default function ObraDefaultsPage() {
     setNewFolderExtractedTables(recipeTables);
     setActiveExtractedTableId(firstTable.id);
     loadEditorFromExtractedTable(firstTable);
+    setHasImportedDefinition(true);
     toast.success("Modelo de certificados aplicado");
   }, [loadEditorFromExtractedTable]);
 
@@ -5195,7 +5218,7 @@ export default function ObraDefaultsPage() {
                     <div>
                       <p className="font-medium">¿Trabajás con certificados?</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Usá un modelo con el resumen y los ítems más comunes.
+                        Usá PMC Resumen para alimentar General y una tabla para el detalle de ítems.
                       </p>
                     </div>
                     <LightButton

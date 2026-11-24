@@ -24,6 +24,11 @@ const nextConfig: NextConfig = {
 	},
 	reactCompiler: true,
 	outputFileTracingIncludes: {
+		"/api/obras/*/documents/access": [
+			"./node_modules/pdfjs-dist/legacy/build/pdf*.mjs",
+			"./node_modules/pdfjs-dist/standard_fonts/**/*",
+			"./node_modules/@napi-rs/canvas*/**/*",
+		],
 		"/api/pdf-render/route": [
 			"./node_modules/@sparticuz/chromium/bin/**/*",
 			"./node_modules/@sparticuz/chromium/**/*",

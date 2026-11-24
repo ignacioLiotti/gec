@@ -38,6 +38,10 @@ function readSingleRelation<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
 export async function GET(request: NextRequest) {
   try {
     const access = await resolveRequestAccessContext();
@@ -63,6 +67,7 @@ export async function GET(request: NextRequest) {
     const documentType = request.nextUrl.searchParams.get("documentType")?.trim();
     const from = request.nextUrl.searchParams.get("from")?.trim();
     const to = request.nextUrl.searchParams.get("to")?.trim();
+    const search = normalizeSearch(request.nextUrl.searchParams.get("q")?.trim().slice(0, 160) ?? "");
     const includePreview = request.nextUrl.searchParams.get("includePreview") === "1";
     const summaryOnly = request.nextUrl.searchParams.get("summary") === "1";
     const statusFilter = mapStatusBucket(
@@ -77,7 +82,7 @@ export async function GET(request: NextRequest) {
       .select(
         includePreview
           ? "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_path, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name, content_html)"
-          : summaryOnly
+          : summaryOnly && !search
             ? "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_path, file_name, status, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name)"
             : "id, obra_id, folder_path, document_type, template_id, template_version, source_draft_id, storage_path, file_name, status, input_data, generated_by, generated_at, updated_at, obras(n, designacion_y_ubicacion), document_generation_templates(name)",
       )
@@ -91,10 +96,23 @@ export async function GET(request: NextRequest) {
     if (from) query = query.gte("generated_at", `${from}T00:00:00.000Z`);
     if (to) query = query.lte("generated_at", `${to}T23:59:59.999Z`);
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+    const rows: Record<string, unknown>[] = [];
+    if (search) {
+      const size = 400;
+      query = query.order("id");
+      for (let start = 0; ; start += size) {
+        const { data, error } = await query.range(start, start + size - 1);
+        if (error) throw error;
+        for (const row of data as unknown as Record<string, unknown>[]) {
+          if (normalizeSearch(JSON.stringify([row.file_name, row.folder_path, row.document_type, row.obras, row.document_generation_templates, row.input_data])).includes(search)) rows.push(row);
+        }
+        if (data.length < size) break;
+      }
+    } else {
+      const { data, error } = await query;
+      if (error) throw error;
+      rows.push(...((data ?? []) as unknown as Record<string, unknown>[]));
+    }
     const actorsById = await loadActorsByIds(rows.map((row) => String(row.generated_by ?? "")));
     const works = await loadWorks(accessContext);
 

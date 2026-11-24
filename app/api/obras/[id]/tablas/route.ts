@@ -46,13 +46,22 @@ const MATERIALS_TEMPLATE_COLUMNS: ColumnInput[] = [
 	{ label: "Total Orden", fieldKey: "totalOrden", dataType: "currency" },
 ];
 
-function toColumnResponse(record: any) {
+function toColumnResponse(record: {
+	id: string;
+	tabla_id: string;
+	field_key: string;
+	label: string;
+	data_type: string;
+	required: boolean;
+	position: number;
+	config: unknown;
+}) {
 	return {
-		id: record.id as string,
-		tablaId: record.tabla_id as string,
-		fieldKey: record.field_key as string,
-		label: record.label as string,
-		dataType: ensureTablaDataType(record.data_type as string | undefined),
+		id: record.id,
+		tablaId: record.tabla_id,
+		fieldKey: record.field_key,
+		label: record.label,
+		dataType: ensureTablaDataType(record.data_type),
 		required: Boolean(record.required),
 		position: record.position ?? 0,
 		config: record.config ?? {},
@@ -81,59 +90,25 @@ export async function GET(_req: Request, context: RouteContext) {
 
 		const { data: obra, error: obraError } = await supabase
 			.from("obras")
-			.select("id")
+			.select(`
+				obra_tablas(
+					id, obra_id, name, description, source_type, settings, created_at,
+					obra_tabla_rows(count),
+					obra_tabla_columns(id, tabla_id, field_key, label, data_type, position, required, config)
+				)
+			`)
 			.eq("id", obraId)
 			.eq("tenant_id", tenantId)
 			.is("deleted_at", null)
+			.order("created_at", { referencedTable: "obra_tablas", ascending: true })
+			.order("position", { referencedTable: "obra_tablas.obra_tabla_columns", ascending: true })
 			.maybeSingle();
 		if (obraError) throw obraError;
 		if (!obra) {
 			return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 		}
 
-		const { data: tablas, error: tablasError } = await supabase
-			.from("obra_tablas")
-			.select(
-				"id, obra_id, name, description, source_type, settings, created_at"
-			)
-			.eq("obra_id", obraId)
-			.order("created_at", { ascending: true });
-		if (tablasError) throw tablasError;
-
-		const tablaIds = (tablas ?? []).map((t) => t.id as string);
-		let columnsByTabla = new Map<
-			string,
-			ReturnType<typeof toColumnResponse>[]
-		>();
-		if (tablaIds.length > 0) {
-			const { data: columns, error: columnsError } = await supabase
-				.from("obra_tabla_columns")
-				.select(
-					"id, tabla_id, field_key, label, data_type, position, required, config"
-				)
-				.in("tabla_id", tablaIds)
-				.order("position", { ascending: true });
-			if (columnsError) throw columnsError;
-			for (const column of columns ?? []) {
-				const mapped = toColumnResponse(column);
-				if (!columnsByTabla.has(mapped.tablaId)) {
-					columnsByTabla.set(mapped.tablaId, []);
-				}
-				columnsByTabla.get(mapped.tablaId)?.push(mapped);
-			}
-		}
-
-		const rowCounts = new Map<string, number>();
-		await Promise.all(tablaIds.map(async (tablaId) => {
-			const { count, error } = await supabase
-				.from("obra_tabla_rows")
-				.select("id", { count: "exact", head: true })
-				.eq("tabla_id", tablaId);
-			if (error) throw error;
-			rowCounts.set(tablaId, count ?? 0);
-		}));
-
-		const result = (tablas ?? []).map((tabla) => {
+		const result = (obra.obra_tablas ?? []).map((tabla) => {
 			const tablaId = tabla.id as string;
 			return {
 				id: tablaId,
@@ -142,8 +117,8 @@ export async function GET(_req: Request, context: RouteContext) {
 				description: tabla.description as string | null,
 				sourceType: tabla.source_type as string,
 				settings: (tabla.settings as Record<string, unknown>) ?? {},
-				rowCount: rowCounts.get(tablaId) ?? 0,
-				columns: columnsByTabla.get(tablaId) ?? [],
+				rowCount: tabla.obra_tabla_rows?.[0]?.count ?? 0,
+				columns: (tabla.obra_tabla_columns ?? []).map(toColumnResponse),
 			};
 		});
 

@@ -11,7 +11,10 @@ import {
   resolveObraFieldValue,
 } from "@/lib/data-flow-builder";
 
-function createEvaluationSupabaseMock(rows: Array<{ id: string; tabla_id: string; data: Record<string, unknown>; created_at: string | null }>) {
+function createEvaluationSupabaseMock(
+  rows: Array<{ id: string; tabla_id: string; data: Record<string, unknown>; created_at: string | null }>,
+  macros: Array<{ id: string; name: string; settings: Record<string, unknown> }> = [],
+) {
   const pmcTableId = "pmc-table";
   const obraTables = [
     {
@@ -53,6 +56,10 @@ function createEvaluationSupabaseMock(rows: Array<{ id: string; tabla_id: string
             resolve({ data: [], error: null });
             return Promise.resolve();
           }
+          if (state.tableName === "macro_tables") {
+            resolve({ data: macros.filter((macro) => state.inValues.includes(macro.id)), error: null });
+            return Promise.resolve();
+          }
           resolve({ data: [], error: null });
           return Promise.resolve();
         },
@@ -61,6 +68,37 @@ function createEvaluationSupabaseMock(rows: Array<{ id: string; tabla_id: string
     },
   };
 }
+
+it("includes template-matched Macro sources and reads only this obra's canonical rows", async () => {
+  const supabase = createEvaluationSupabaseMock([
+    { id: "summary", tabla_id: "pmc-table", data: { monto_acumulado: 120 }, created_at: null },
+    { id: "other-summary", tabla_id: "other-obra", data: { monto_acumulado: 80 }, created_at: null },
+  ], [{
+    id: "macro",
+    name: "Certificados - Contable",
+    settings: { sourceMode: "template", sourceTemplateName: "PMC Resumen" },
+  }]) as unknown as SupabaseClient;
+  const config = getTenantDataFlowBuilderConfig({
+    dataFlowBuilder: {
+      calculations: [{
+        id: "macro-sum",
+        mode: "aggregate",
+        sourceType: "macro_table",
+        sourceId: "macro",
+        fieldKey: "monto_acumulado",
+        aggregation: "sum",
+      }],
+    },
+  });
+  const calculated = await evaluateObraDataFlowBuilder({
+    supabase,
+    obraId: "obra",
+    tenantId: "tenant",
+    config,
+    obraValues: {},
+  });
+  expect(calculated.calculations.find((entry) => entry.id === "macro-sum")?.value).toBe(120);
+});
 
 describe("data-flow builder obra fields", () => {
   it("lists base obra fields plus configured and stored custom fields", () => {

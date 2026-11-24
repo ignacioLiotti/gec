@@ -75,6 +75,7 @@ type SampleAnalysisCardProps = {
   onApply: (definitionJson: string) => void;
   initialSample?: { fileName: string; analysis: SampleAnalysis };
   allowSampleReplacement?: boolean;
+  sampleNote?: string;
 };
 
 function hasAcceptedExtension(fileName: string) {
@@ -133,7 +134,7 @@ function Segmented<T extends string>({
   );
 }
 
-export function SampleAnalysisCard({ onApply, initialSample, allowSampleReplacement = true }: SampleAnalysisCardProps) {
+export function SampleAnalysisCard({ onApply, initialSample, allowSampleReplacement = true, sampleNote }: SampleAnalysisCardProps) {
   const [status, setStatus] = useState<Status>(initialSample ? "review" : "idle");
   const [fileName, setFileName] = useState(initialSample?.fileName ?? "");
   const [analysis, setAnalysis] = useState<SampleAnalysis | null>(initialSample?.analysis ?? null);
@@ -201,6 +202,7 @@ export function SampleAnalysisCard({ onApply, initialSample, allowSampleReplacem
     try {
       const formData = new FormData();
       formData.append("file", file);
+      if (sampleNote?.trim()) formData.append("note", sampleNote);
       const res = await fetch("/api/obra-defaults/analyze-sample", {
         method: "POST",
         body: formData,
@@ -258,7 +260,7 @@ export function SampleAnalysisCard({ onApply, initialSample, allowSampleReplacem
       );
       setStatus("idle");
     }
-  }, []);
+  }, [sampleNote]);
 
   const selectedCount = useMemo(() => {
     let count = selectedFieldKeys.size;

@@ -28,7 +28,7 @@ import {
   type FolderGenerationConfig,
 } from "@/lib/document-generation";
 
-type AccessContext = {
+export type AccessContext = {
   supabase: SupabaseClient;
   tenantId: string;
   userId: string | null;
@@ -335,13 +335,13 @@ export async function loadWorks(access: AccessContext) {
   }));
 }
 
-export async function loadTemplates(access: AccessContext) {
-  return loadTemplateCatalog(access, { activeOnly: true });
+export async function loadTemplates(access: AccessContext, key?: string) {
+  return loadTemplateCatalog(access, { activeOnly: true, key });
 }
 
 export async function loadTemplateCatalog(
   access: AccessContext,
-  options?: { activeOnly?: boolean },
+  options?: { activeOnly?: boolean; key?: string },
 ) {
   let query = access.supabase
     .from("document_generation_templates")
@@ -350,10 +350,7 @@ export async function loadTemplateCatalog(
     )
     .order("version", { ascending: false })
     .order("updated_at", { ascending: false });
-  if (options?.activeOnly) {
-    query = query.eq("status", "active");
-  }
-
+  if (options?.key) query = query.eq("key", options.key);
   const { data, error } = await query;
   if (error) throw error;
 
@@ -362,7 +359,16 @@ export async function loadTemplateCatalog(
   );
   const dedupedRows = pickPreferredTemplateRows(access.tenantId, visibleRows);
 
-  return dedupedRows.map(toTemplateSummary);
+  if (!options?.activeOnly) return dedupedRows.map(toTemplateSummary);
+
+  const latestByKey = new Map<string, TemplateRow>();
+  for (const row of dedupedRows) {
+    const latest = latestByKey.get(row.key);
+    if (!latest || row.version > latest.version) latestByKey.set(row.key, row);
+  }
+  return dedupedRows
+    .filter((row) => row.status === "active" && latestByKey.get(row.key)?.status === "active")
+    .map(toTemplateSummary);
 }
 
 function toTemplateSummary(row: TemplateRow): DocumentTemplateSummary {
@@ -609,6 +615,7 @@ export async function loadFolderGenerationConfigs(
 }
 
 export function resolveGenerationContext(args: {
+  preferredTemplateId?: string | null;
   documentType: DocumentType | null;
   folderPath: string;
   folderConfigs: FolderGenerationConfig[];
@@ -616,16 +623,15 @@ export function resolveGenerationContext(args: {
 }) {
   const normalizedFolderPath = normalizeFolderGenerationPath(args.folderPath);
   const folderConfig = args.folderConfigs.find((config) => config.path === normalizedFolderPath) ?? null;
-  const allowedDocumentTypes =
-    folderConfig?.allowedDocumentTypes?.length
-      ? folderConfig.allowedDocumentTypes
-      : args.documentType
-        ? [args.documentType]
-        : [];
+  const allowedDocumentTypes = [...new Set(args.templates
+    .filter((template) => (!normalizedFolderPath || !template.targetFolderPath || template.targetFolderPath === normalizedFolderPath)
+      && (!folderConfig?.allowedDocumentTypes.length || folderConfig.allowedDocumentTypes.includes(template.documentType)))
+    .map((template) => template.documentType))];
 
   const resolvedDocumentType =
-    args.documentType ??
-    (allowedDocumentTypes.length === 1 ? allowedDocumentTypes[0] : null);
+    args.documentType && allowedDocumentTypes.includes(args.documentType)
+      ? args.documentType
+      : allowedDocumentTypes.length === 1 ? allowedDocumentTypes[0] : null;
 
   const folderCandidates =
     resolvedDocumentType == null
@@ -649,6 +655,7 @@ export function resolveGenerationContext(args: {
         })());
 
   const filteredTemplates = args.templates.filter((template) => {
+    if (!allowedDocumentTypes.includes(template.documentType)) return false;
     if (resolvedDocumentType && template.documentType !== resolvedDocumentType) return false;
     if (resolvedFolderPath && template.targetFolderPath && template.targetFolderPath !== resolvedFolderPath) {
       return false;
@@ -656,12 +663,21 @@ export function resolveGenerationContext(args: {
     return true;
   });
 
-  const selectedTemplate =
-    filteredTemplates.length === 1
-      ? filteredTemplates[0]
+  const latestByKey = new Map<string, DocumentTemplateSummary>();
+  for (const template of filteredTemplates) {
+    const current = latestByKey.get(template.key);
+    if (!current || template.version > current.version) latestByKey.set(template.key, template);
+  }
+  const currentTemplates = [...latestByKey.values()];
+  const preferredTemplate = filteredTemplates.find((template) => template.id === args.preferredTemplateId);
+  const selectedTemplate = preferredTemplate ?? (
+    currentTemplates.length === 1
+      ? currentTemplates[0]
       : resolvedFolderPath
-        ? filteredTemplates.find((template) => template.targetFolderPath === resolvedFolderPath) ?? null
-        : null;
+        ? currentTemplates.find((template) => template.key === "purchase-order-default" && template.targetFolderPath === resolvedFolderPath)
+          ?? currentTemplates.find((template) => template.targetFolderPath === resolvedFolderPath) ?? null
+        : null
+  );
 
   return {
     folderConfig,
@@ -669,7 +685,9 @@ export function resolveGenerationContext(args: {
     resolvedDocumentType,
     resolvedFolderPath,
     folderCandidates,
-    filteredTemplates,
+    filteredTemplates: preferredTemplate && !currentTemplates.some((template) => template.id === preferredTemplate.id)
+      ? [...currentTemplates, preferredTemplate]
+      : currentTemplates,
     selectedTemplate,
     initialInputData: buildInitialInputData(selectedTemplate?.schema ?? { fields: [] }),
   };

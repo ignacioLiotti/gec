@@ -915,7 +915,7 @@ export function SemanticFlowView({
                     <option key={source.id} value={source.id}>{source.name}</option>
                   ))}
                   {input.sourceType === "macro_table" && (payload?.sources.macroTables ?? []).map(source => (
-                    <option key={source.id} value={source.id}>{source.name}</option>
+                    <option key={source.id} value={source.id}>{source.name} · datos de origen</option>
                   ))}
                   {input.sourceType === "calculation" && calculations.filter(c => c.id !== calc.id).map(source => (
                     <option key={source.id} value={source.id}>{source.label}</option>
@@ -1093,7 +1093,9 @@ export function SemanticFlowView({
                         style={semanticSelectStyle(150)}
                       >
                         {aggregateSources.map(s => (
-                          <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>{s.name}</option>
+                          <option key={`${s.type}:${s.id}`} value={`${s.type}:${s.id}`}>
+                            {s.name}{s.type === "macro_table" ? " · datos de origen" : ""}
+                          </option>
                         ))}
                       </select>
                     </div>

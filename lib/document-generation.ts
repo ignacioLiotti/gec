@@ -1,3 +1,5 @@
+import { appendPurchaseOrderSupplier } from "@/lib/purchase-order-supplier";
+import { evaluateDocumentFormula } from "@/lib/document-formula";
 import {
 	coerceValueForType,
 	evaluateTablaFormula,
@@ -43,7 +45,9 @@ export type TemplateFieldType =
 	| "money"
 	| "table"
 	| "work_reference"
-	| "supplier_reference";
+	| "supplier_reference"
+	| "reference"
+	| "lookup";
 
 export type TemplateFieldSource = "folder" | "extra";
 export type TemplateSelectMode = "strict" | "creatable";
@@ -74,6 +78,36 @@ export type TemplateField = {
 	repeatableGroup?: string | null;
 	repeatableGroupLabel?: string | null;
 	columns?: TemplateField[];
+	/** Links the field to records of the app (users, obras, tablas, documents). */
+	reference?: TemplateReference | null;
+	/** Copies one attribute of the record chosen in a sibling reference field. */
+	lookup?: TemplateLookup | null;
+};
+
+export type TemplateReferenceCopy = {
+	/** Record attribute, or "tabla.columna" when the record holds rows. */
+	from: string;
+	/** Field key, or "tabla.columna" for a table of this template. */
+	to: string;
+};
+
+export type TemplateReference = {
+	source: string;
+	display: string;
+	match?: string | null;
+	copy?: TemplateReferenceCopy[];
+};
+
+export type TemplateLookup = {
+	from: string;
+	attribute: string;
+};
+
+/** A record offered by a reference source. "values" are its attributes. */
+export type ReferenceRecord = {
+	id: string;
+	label: string;
+	values: Record<string, unknown>;
 };
 
 export type TemplateSelectOption = {
@@ -86,6 +120,8 @@ export type TemplateSchema = {
 	fields: TemplateField[];
 	documentNumberFieldKey?: string | null;
 	fileNamePattern?: string | null;
+	/** Template Spec the schema was compiled from, kept for the visual editor. */
+	spec?: Record<string, unknown> | null;
 };
 
 export type ValidationError = {
@@ -282,7 +318,14 @@ export function normalizeTemplateSchema(value: unknown): TemplateSchema {
 			source.fileNamePattern.trim().length > 0
 				? source.fileNamePattern.trim()
 				: null,
+		spec: readPlainObject((value as { spec?: unknown }).spec),
 	};
+}
+
+function readPlainObject(value: unknown): Record<string, unknown> | null {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: null;
 }
 
 function normalizeTemplateField(
@@ -361,7 +404,41 @@ function normalizeTemplateField(
 							normalizeTemplateField(column, `column_${index + 1}`),
 						)
 				: undefined,
+		reference: type === "reference" ? normalizeTemplateReference(field.reference) : undefined,
+		lookup: type === "lookup" ? normalizeTemplateLookup(field.lookup) : undefined,
 	};
+}
+
+export function normalizeTemplateReference(value: unknown): TemplateReference | null {
+	const raw = readPlainObject(value);
+	if (!raw) return null;
+	const source = typeof raw.source === "string" ? raw.source.trim() : "";
+	const display = typeof raw.display === "string" ? raw.display.trim() : "";
+	if (!source || !display) return null;
+	const copy = Array.isArray(raw.copy)
+		? raw.copy
+				.map(readPlainObject)
+				.filter((entry): entry is Record<string, unknown> => entry != null)
+				.map((entry) => ({
+					from: typeof entry.from === "string" ? entry.from.trim() : "",
+					to: typeof entry.to === "string" ? entry.to.trim() : "",
+				}))
+				.filter((entry) => entry.from && entry.to)
+		: [];
+	return {
+		source,
+		display,
+		match: typeof raw.match === "string" && raw.match.trim() ? raw.match.trim() : null,
+		...(copy.length > 0 ? { copy } : {}),
+	};
+}
+
+export function normalizeTemplateLookup(value: unknown): TemplateLookup | null {
+	const raw = readPlainObject(value);
+	if (!raw) return null;
+	const from = typeof raw.from === "string" ? raw.from.trim() : "";
+	const attribute = typeof raw.attribute === "string" ? raw.attribute.trim() : "";
+	return from && attribute ? { from, attribute } : null;
 }
 
 function normalizeTemplateSelectOption(
@@ -420,6 +497,8 @@ function normalizeFieldType(value: unknown): TemplateFieldType {
 		case "table":
 		case "work_reference":
 		case "supplier_reference":
+		case "reference":
+		case "lookup":
 			return value;
 		default:
 			return "text";
@@ -532,6 +611,21 @@ function validateTableField(
 	return errors;
 }
 
+function parseDocumentNumber(value: unknown): number | null {
+	if (typeof value === "number") return Number.isFinite(value) ? value : null;
+	if (typeof value !== "string") return null;
+	let text = value.trim();
+	if (/^[+-]?\d{1,3}(\.\d{3})+,\d+$/.test(text)) text = text.replaceAll(".", "");
+	if (!/^[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(text)) return null;
+	const parsed = Number(text.replace(",", "."));
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function evaluateDocumentTableFormula(formula: string, values: Record<string, unknown>) {
+	const scope = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, parseDocumentNumber(value) ?? value]));
+	return evaluateTablaFormula(formula, scope);
+}
+
 function validateFieldValue(
 	field: TemplateField,
 	value: unknown,
@@ -540,13 +634,14 @@ function validateFieldValue(
 	const normalizedValue =
 		typeof value === "string" ? value.trim() : value == null ? "" : value;
 	const isEmpty = normalizedValue == null || normalizedValue === "";
+	if (field.type === "lookup") return [];
 	if (!field.required && isEmpty) return [];
 	if (field.type === "number" || field.type === "money") {
 		if (isEmpty) {
 			return [{ key: errorKey, message: `${field.label} es obligatorio.` }];
 		}
-		const parsed = Number(normalizedValue);
-		if (!Number.isFinite(parsed)) {
+		const parsed = parseDocumentNumber(normalizedValue);
+		if (parsed === null) {
 			return [{ key: errorKey, message: `${field.label} debe ser numerico.` }];
 		}
 		return [];
@@ -904,21 +999,8 @@ export function applyTemplateAutoInputData(
 	return next;
 }
 
-function getTemplateFormulaReferences(formula: string) {
-	return Array.from(formula.matchAll(/\[([a-zA-Z_][a-zA-Z0-9_]*)\]/g)).map(
-		(match) => match[1],
-	);
-}
-
-function canEvaluateTemplateFormula(
-	formula: string,
-	inputData: Record<string, unknown>,
-) {
-	const references = getTemplateFormulaReferences(formula);
-	return (
-		references.length > 0 &&
-		references.every((key) => hasTemplateInputValue(inputData[key]))
-	);
+function evaluateTemplateFormula(formula: string, scope: Record<string, unknown>) {
+	return evaluateDocumentFormula(formula, scope).value;
 }
 
 function coerceTemplateFormulaValue(field: TemplateField, value: number) {
@@ -955,8 +1037,8 @@ function applyRepeatableFormulaInputData(
 				let passChanged = false;
 				for (const field of formulaFields) {
 					const formula = field.formula?.trim();
-					if (!formula || !canEvaluateTemplateFormula(formula, nextRow)) continue;
-					const computed = evaluateTablaFormula(formula, nextRow);
+					if (!formula) continue;
+					const computed = evaluateTemplateFormula(formula, { ...next, ...nextRow });
 					if (computed == null) continue;
 					const nextValue = coerceTemplateFormulaValue(field, computed);
 					if (nextRow[field.key] === nextValue) continue;
@@ -1012,12 +1094,12 @@ function applyPurchaseOrderLineTotals(
 		const nextRows = rows.map((row) => {
 			if (!row || typeof row !== "object" || Array.isArray(row)) return row;
 			const rowData = row as Record<string, unknown>;
-			const quantity = toNumericValue(rowData.cantidad);
-			const unitPrice = toNumericValue(rowData.precio_unitario);
+			const quantity = parseDocumentNumber(rowData.cantidad);
+			const unitPrice = parseDocumentNumber(rowData.precio_unitario);
 			if (quantity == null || unitPrice == null) return row;
 
 			const lineTotal = roundMoney(quantity * unitPrice);
-			if (toNumericValue(rowData.precio_total) === lineTotal) return row;
+			if (parseDocumentNumber(rowData.precio_total) === lineTotal) return row;
 			rowsChanged = true;
 			return { ...rowData, precio_total: lineTotal };
 		});
@@ -1040,9 +1122,9 @@ function calculatePurchaseOrderSubtotal(
 		for (const row of rows) {
 			if (!row || typeof row !== "object" || Array.isArray(row)) continue;
 			const rowData = row as Record<string, unknown>;
-			const explicitTotal = toNumericValue(rowData.precio_total);
-			const quantity = toNumericValue(rowData.cantidad);
-			const unitPrice = toNumericValue(rowData.precio_unitario);
+			const explicitTotal = parseDocumentNumber(rowData.precio_total);
+			const quantity = parseDocumentNumber(rowData.cantidad);
+			const unitPrice = parseDocumentNumber(rowData.precio_unitario);
 			const rowTotal =
 				explicitTotal ??
 				(quantity != null && unitPrice != null
@@ -1105,20 +1187,20 @@ function applyPurchaseOrderCalculatedInputData(
 		setValue("subtotal", subtotalFromItems);
 	}
 
-	const subtotal = toNumericValue(next.subtotal);
+	const subtotal = parseDocumentNumber(next.subtotal);
 	if (subtotal == null) return next;
 
 	const recargoPorcentaje =
-		toNumericValue(next.recargo_porcentaje) ?? 21;
+		parseDocumentNumber(next.recargo_porcentaje) ?? 21;
 	setValue("recargo_porcentaje", recargoPorcentaje);
 	setValue("recargo", roundMoney((subtotal * recargoPorcentaje) / 100));
 
-	const recargo = toNumericValue(next.recargo) ?? 0;
+	const recargo = parseDocumentNumber(next.recargo) ?? 0;
 	setValue("total_orden", roundMoney(subtotal + recargo));
 
-	const totalOrden = toNumericValue(next.total_orden);
+	const totalOrden = parseDocumentNumber(next.total_orden);
 	const bonificacionPorcentaje =
-		toNumericValue(next.bonificacion_porcentaje) ?? 0;
+		parseDocumentNumber(next.bonificacion_porcentaje) ?? 0;
 	setValue("bonificacion_porcentaje", bonificacionPorcentaje);
 	if (totalOrden != null) {
 		setValue(
@@ -1128,7 +1210,7 @@ function applyPurchaseOrderCalculatedInputData(
 	}
 
 	if (totalOrden != null) {
-		const bonificacion = toNumericValue(next.bonificacion) ?? 0;
+		const bonificacion = parseDocumentNumber(next.bonificacion) ?? 0;
 		setValue("total_a_pagar", roundMoney(totalOrden - bonificacion));
 	}
 
@@ -1162,8 +1244,8 @@ export function applyTemplateFormulaInputData(
 		}
 		for (const field of formulaFields) {
 			const formula = field.formula?.trim();
-			if (!formula || !canEvaluateTemplateFormula(formula, next)) continue;
-			const computed = evaluateTablaFormula(formula, next);
+			if (!formula) continue;
+			const computed = evaluateTemplateFormula(formula, next);
 			if (computed == null) continue;
 			const nextValue = coerceTemplateFormulaValue(field, computed);
 			if (next[field.key] === nextValue) continue;
@@ -1429,9 +1511,9 @@ export function renderDocumentHtml(
 								)
 							: {};
 					return block.replace(
-						/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
-						(_rowMatch: string, token: string) => {
-							return escapeHtml(rowScope[token] ?? scope[token] ?? "");
+						TEMPLATE_TOKEN_PATTERN,
+						(_rowMatch: string, token: string, filter?: string) => {
+							return escapeHtml(applyTemplateValueFilter(rowScope[token] ?? scope[token] ?? "", filter));
 						},
 					);
 				})
@@ -1440,12 +1522,29 @@ export function renderDocumentHtml(
 	);
 
 	const renderedHtml = renderedRepeatables.replace(
-		/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
-		(_, token: string) => {
-			return escapeHtml(scope[token] ?? "");
+		TEMPLATE_TOKEN_PATTERN,
+		(_, token: string, filter?: string) => {
+			return escapeHtml(applyTemplateValueFilter(scope[token] ?? "", filter));
 		},
 	);
-	return applyDocumentTemplateOverrides(templateHtml, renderedHtml);
+	return appendPurchaseOrderSupplier(applyDocumentTemplateOverrides(templateHtml, renderedHtml), inputData, escapeHtml);
+}
+
+/** `{{campo}}` or `{{campo|money}}`; filters: money, number, date. */
+const TEMPLATE_TOKEN_PATTERN =
+	/\{\{\s*([a-zA-Z0-9_]+)\s*(?:\|\s*(money|number|date)\s*)?\}\}/g;
+
+function applyTemplateValueFilter(value: string, filter: string | undefined) {
+	if (!filter || value.trim() === "") return value;
+	if (filter === "date") {
+		const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+		return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+	}
+	const numeric = toNumericValue(value);
+	if (numeric == null) return value;
+	return filter === "money"
+		? `$ ${numeric.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+		: numeric.toLocaleString("es-AR", { maximumFractionDigits: 4 });
 }
 
 export function appendApprovalSignatureHtml(
@@ -1827,8 +1926,227 @@ function applyFormulaColumns(
 				? column.config.formula.trim()
 				: "";
 		if (!formula) continue;
-		const computed = evaluateTablaFormula(formula, nextRow);
+		const computed = evaluateDocumentTableFormula(formula, nextRow);
 		nextRow[column.fieldKey] = coerceValueForType(column.dataType, computed);
 	}
 	return nextRow;
+}
+
+const REFERENCE_STATE_KEY = "__refs";
+
+function readReferenceState(value: unknown): Record<string, string> {
+	const raw = readPlainObject(value);
+	if (!raw) return {};
+	return Object.fromEntries(
+		Object.entries(raw).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+	);
+}
+
+/** Text shown for a record in a reference field: its display attribute. */
+export function formatReferenceRecordLabel(record: ReferenceRecord, reference: TemplateReference) {
+	const value = record.values[reference.display];
+	return value == null || value === "" || typeof value === "object" ? record.label : String(value);
+}
+
+function findReferenceRecord(
+	reference: TemplateReference,
+	records: ReferenceRecord[],
+	value: unknown,
+	previousId: string | undefined,
+) {
+	const text = typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
+	if (!text) return null;
+	const lower = text.toLowerCase();
+	const byPrevious = previousId ? records.find((record) => record.id === previousId) : undefined;
+	const shown = (record: ReferenceRecord) => formatReferenceRecordLabel(record, reference).trim().toLowerCase();
+	if (byPrevious && shown(byPrevious) === lower) return byPrevious;
+	return (
+		records.find((record) => shown(record) === lower) ??
+		records.find((record) => record.id === text) ??
+		(reference.match
+			? records.find((record) => String(record.values[reference.match as string] ?? "").trim().toLowerCase() === lower)
+			: undefined) ??
+		null
+	);
+}
+
+function readRecordPath(record: ReferenceRecord, path: string): unknown {
+	return record.values[path];
+}
+
+function applyReferenceCopy(
+	schema: TemplateSchema,
+	data: Record<string, unknown>,
+	reference: TemplateReference,
+	record: ReferenceRecord,
+) {
+	let next = data;
+	const rowCopies = new Map<string, Array<{ fromTable: string; fromColumn: string; toColumn: string }>>();
+	for (const entry of reference.copy ?? []) {
+		const [toTable, toColumn] = entry.to.split(".");
+		if (toColumn) {
+			const [fromTable, fromColumn] = entry.from.split(".");
+			if (!fromColumn) continue;
+			rowCopies.set(toTable, [...(rowCopies.get(toTable) ?? []), { fromTable, fromColumn, toColumn }]);
+			continue;
+		}
+		const sourceValue = readRecordPath(record, entry.from);
+		if (sourceValue === undefined) continue;
+		next = { ...next, [entry.to]: sourceValue };
+	}
+	for (const [tableKey, copies] of rowCopies) {
+		const table = schema.fields.find((field) => field.type === "table" && field.key === tableKey);
+		if (!table) continue;
+		const sourceRows = record.values[copies[0].fromTable];
+		if (!Array.isArray(sourceRows)) continue;
+		next = {
+			...next,
+			[tableKey]: sourceRows.map((sourceRow) => {
+				const rowData = readPlainObject(sourceRow) ?? {};
+				const row: Record<string, unknown> = Object.fromEntries(
+					(table.columns ?? []).map((column) => [column.key, column.defaultValue ?? ""]),
+				);
+				for (const copy of copies) row[copy.toColumn] = rowData[copy.fromColumn] ?? "";
+				const sourceRefs = readReferenceState(rowData[REFERENCE_STATE_KEY]);
+				const rowRefs: Record<string, string> = {};
+				for (const copy of copies) {
+					if (sourceRefs[copy.fromColumn]) rowRefs[copy.toColumn] = sourceRefs[copy.fromColumn];
+				}
+				if (Object.keys(rowRefs).length > 0) row[REFERENCE_STATE_KEY] = rowRefs;
+				return row;
+			}),
+		};
+	}
+	return next;
+}
+
+function resolveReferencesInScope(
+	fields: TemplateField[],
+	scope: Record<string, unknown>,
+	recordsBySource: Record<string, ReferenceRecord[]>,
+) {
+	const state = readReferenceState(scope[REFERENCE_STATE_KEY]);
+	const nextState: Record<string, string> = { ...state };
+	const changedRecords: Array<{ field: TemplateField; record: ReferenceRecord }> = [];
+	let next = scope;
+	const set = (key: string, value: unknown) => {
+		if (next[key] === value) return;
+		next = { ...next, [key]: value };
+	};
+	const chosen = new Map<string, ReferenceRecord | null>();
+
+	for (const field of fields) {
+		if (field.type !== "reference" || !field.reference) continue;
+		const records = recordsBySource[field.reference.source];
+		if (!records) continue;
+		const record = findReferenceRecord(field.reference, records, next[field.key], state[field.key]);
+		chosen.set(field.key, record);
+		if (record) {
+			set(field.key, formatReferenceRecordLabel(record, field.reference));
+			if (state[field.key] !== record.id) changedRecords.push({ field, record });
+			nextState[field.key] = record.id;
+		} else {
+			delete nextState[field.key];
+		}
+	}
+
+	for (const field of fields) {
+		if (field.type !== "lookup" || !field.lookup || !chosen.has(field.lookup.from)) continue;
+		const record = chosen.get(field.lookup.from);
+		const value = record ? record.values[field.lookup.attribute] : "";
+		set(field.key, value == null || Array.isArray(value) || typeof value === "object" ? "" : value);
+	}
+
+	const stateChanged =
+		Object.keys(nextState).length !== Object.keys(state).length ||
+		Object.entries(nextState).some(([key, id]) => state[key] !== id);
+	if (stateChanged) {
+		if (Object.keys(nextState).length > 0) set(REFERENCE_STATE_KEY, nextState);
+		else if (REFERENCE_STATE_KEY in next) {
+			next = Object.fromEntries(Object.entries(next).filter(([key]) => key !== REFERENCE_STATE_KEY));
+		}
+	}
+	return { data: next, changedRecords };
+}
+
+/**
+ * Resolves reference fields against loaded records: normalizes the shown
+ * label, remembers the chosen record id under "__refs", fills lookup fields
+ * and, when the chosen record changes, copies the mapped values (for
+ * example the items of a purchase order into a reception). Tables resolve
+ * their reference columns row by row. Fields whose source has no loaded
+ * records are left untouched.
+ */
+export function applyTemplateReferenceInputData(
+	schema: TemplateSchema,
+	current: Record<string, unknown>,
+	recordsBySource: Record<string, ReferenceRecord[]>,
+) {
+	const topLevel = schema.fields.filter((field) => field.type !== "table" && !field.repeatableGroup);
+	const resolved = resolveReferencesInScope(topLevel, current, recordsBySource);
+	let next = resolved.data;
+	for (const { field, record } of resolved.changedRecords) {
+		if (field.reference?.copy?.length) next = applyReferenceCopy(schema, next, field.reference, record);
+	}
+
+	for (const table of schema.fields) {
+		if (table.type !== "table") continue;
+		const columns = table.columns ?? [];
+		if (!columns.some((column) => column.type === "reference")) continue;
+		const rows = next[table.key];
+		if (!Array.isArray(rows)) continue;
+		let changed = false;
+		const nextRows = rows.map((row) => {
+			const rowData = readPlainObject(row);
+			if (!rowData) return row;
+			const result = resolveReferencesInScope(columns, rowData, recordsBySource).data;
+			if (result !== rowData) changed = true;
+			return result;
+		});
+		if (changed) next = { ...next, [table.key]: nextRows };
+	}
+	return next;
+}
+
+/** Source keys used by the reference fields of a schema, tables included. */
+export function getTemplateReferenceSources(schema: TemplateSchema) {
+	const sources = new Set<string>();
+	const visit = (field: TemplateField) => {
+		if (field.type === "reference" && field.reference) sources.add(field.reference.source);
+		field.columns?.forEach(visit);
+	};
+	schema.fields.forEach(visit);
+	return [...sources];
+}
+
+/**
+ * Reports reference values that do not identify a loaded record. Run after
+ * applyTemplateReferenceInputData; sources without loaded records are skipped.
+ */
+export function validateTemplateReferences(
+	schema: TemplateSchema,
+	inputData: Record<string, unknown>,
+	recordsBySource: Record<string, ReferenceRecord[]>,
+): ValidationError[] {
+	const errors: ValidationError[] = [];
+	const check = (field: TemplateField, scope: Record<string, unknown>, errorKey: string) => {
+		if (field.type !== "reference" || !field.reference || !recordsBySource[field.reference.source]) return;
+		const value = scope[field.key];
+		if (value == null || String(value).trim() === "") return;
+		if (!readReferenceState(scope[REFERENCE_STATE_KEY])[field.key]) {
+			errors.push({ key: errorKey, message: `${field.label} debe elegirse de la lista.` });
+		}
+	};
+	for (const field of schema.fields) {
+		if (field.type === "table") {
+			const rows = Array.isArray(inputData[field.key]) ? (inputData[field.key] as unknown[]) : [];
+			rows.forEach((row, rowIndex) => {
+				const rowData = readPlainObject(row) ?? {};
+				for (const column of field.columns ?? []) check(column, rowData, `${field.key}.${rowIndex}.${column.key}`);
+			});
+		} else if (!field.repeatableGroup) {
+			check(field, inputData, field.key);
+		}
+	}
+	return errors;
 }

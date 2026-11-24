@@ -502,9 +502,37 @@ export default function NewMacroTablePage() {
 
       setSelectedSources(matchingTables);
       toast.success(`${matchingTables.length} tablas seleccionadas automáticamente`);
+      return true;
     },
     [obras, templates]
   );
+
+  const certificateSummaryTemplate = templates.find((template) =>
+    obras.some((obra) => obra.tablas.some((tabla) =>
+      normalizeTemplateName(extractBaseTableName(tabla.name)) === "pmc resumen" &&
+      matchesTemplate(tabla, template),
+    )),
+  );
+
+  const startCertificateMacro = () => {
+    if (!certificateSummaryTemplate) return;
+    const summaryNames = [...new Set(obras.flatMap((obra) => obra.tablas
+      .filter((tabla) =>
+        normalizeTemplateName(extractBaseTableName(tabla.name)) === "pmc resumen" &&
+        matchesTemplate(tabla, certificateSummaryTemplate),
+      )
+      .map((tabla) => extractBaseTableName(tabla.name)),
+    ))];
+    if (!applyTemplateSelection(certificateSummaryTemplate.id, summaryNames)) return;
+    setName((current) => current.trim() || "Certificados - Contable");
+    setDescription((current) => current.trim() || "Seguimiento contable a partir del resumen de certificación de cada obra.");
+    setColumns([
+      { id: crypto.randomUUID(), columnType: "computed", sourceFieldKey: null, label: "Obra", dataType: "text", config: { compute: "obra_name" } },
+      { id: crypto.randomUUID(), columnType: "custom", sourceFieldKey: null, label: "Cobrado", dataType: "text", config: {} },
+      { id: crypto.randomUUID(), columnType: "custom", sourceFieldKey: null, label: "Observaciones", dataType: "text", config: {} },
+    ]);
+    setCurrentStep(2);
+  };
 
   // Select all tables matching a template name
   const selectByTemplate = (templateId: string | null) => {
@@ -981,6 +1009,11 @@ export default function NewMacroTablePage() {
                 </div>
 
                 <div className="space-y-4">
+                  {certificateSummaryTemplate ? (
+                    <Button type="button" variant="outline" onClick={startCertificateMacro}>
+                      Usar modelo de certificados contable
+                    </Button>
+                  ) : null}
                   <div className="space-y-2">
                     <Label htmlFor="name">Nombre *</Label>
                     <Input

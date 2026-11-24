@@ -115,6 +115,17 @@ function rewriteGoogleRequest(request) {
   });
 }
 
+// Opt-in exceptions for local comparison servers (never set by the integration
+// harness): exact HTTPS hosts, comma separated, e.g. "api.openai.com".
+const allowedHttpsHosts = new Set(
+  (process.env.INTEGRATION_ALLOWED_HTTPS_HOSTS ?? "").split(",").map((host) => host.trim().toLowerCase()).filter(Boolean),
+);
+
+function isAllowedExternalRequest(request) {
+  const url = new URL(request.url);
+  return url.protocol === "https:" && url.port === "" && !url.username && !url.password && allowedHttpsHosts.has(url.hostname);
+}
+
 const originalFetch = globalThis.fetch;
 globalThis.fetch = function (input, init) {
   let request;
@@ -123,6 +134,7 @@ globalThis.fetch = function (input, init) {
     if (provider && isGoogleGenerateContentRequest(request)) {
       return originalFetch(rewriteGoogleRequest(request));
     }
+    if (isAllowedExternalRequest(request)) return originalFetch(request);
     assertLoopback(request.url);
   }
   catch (error) { return Promise.reject(error); }

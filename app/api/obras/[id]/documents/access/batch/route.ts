@@ -71,27 +71,21 @@ export async function POST(request: Request, context: RouteContext) {
 
 		const { data: obra, error: obraError } = await supabase
 			.from("obras")
-			.select("id")
+			.select("obra_document_deletes(storage_path, item_type)")
 			.eq("id", obraId)
 			.eq("tenant_id", tenantId)
 			.is("deleted_at", null)
+			.eq("obra_document_deletes.tenant_id", tenantId)
+			.is("obra_document_deletes.restored_at", null)
 			.maybeSingle();
 		if (obraError) throw obraError;
 		if (!obra) {
 			return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
 		}
 
-		const { data: deleteRows, error: deleteRowsError } = await supabase
-			.from("obra_document_deletes")
-			.select("storage_path, item_type")
-			.eq("tenant_id", tenantId)
-			.eq("obra_id", obraId)
-			.is("restored_at", null);
-		if (deleteRowsError) throw deleteRowsError;
-
 		const isBlocked = (storagePath: string) => {
 			const legacyNormalizedStoragePath = normalizeFolderPath(storagePath);
-			return (deleteRows ?? []).some((row) => {
+			return (obra.obra_document_deletes ?? []).some((row) => {
 				const deletedPath =
 					typeof row.storage_path === "string" ? row.storage_path : "";
 				if (!deletedPath) return false;
@@ -168,7 +162,13 @@ export async function POST(request: Request, context: RouteContext) {
 		}
 
 		return NextResponse.json(
-			Object.keys(errors).length > 0 ? { urls, errors } : { urls },
+			{
+				urls,
+				...(Object.keys(errors).length > 0 ? { errors } : {}),
+				cacheScope: actorType === "demo" || access.permissionSimulation || !user
+					? null
+					: JSON.stringify([tenantId, user.id]),
+			},
 		);
 	} catch (error) {
 		console.error("[documents:access:batch]", error);

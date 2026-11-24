@@ -40,6 +40,8 @@ The Documents tab in each obra provides a **file tree browser** backed by Supaba
 
 The active legacy Documents UI reads `GET /api/obras/[id]/documents/list`, optionally with `?path=<relative folder>`. Root and path responses include OCR table/schema metadata but do not load extracted rows. The route merges tracked-file metadata with one immediate Storage listing, so ordinary folders containing only `.keep` remain visible. Descendants load lazily when opened.
 
+Documentos New requests `view=folder` to receive the current folder, file statuses, and linked table columns. Image and PDF thumbnails start loading as their cards approach the viewport. Its Tabla view requests extracted rows in batches of 50 and displays 25 per page by default. Cargar más filas appends another batch. Search, sorting, and CSV export use the loaded rows. Ver datos in the document preview requests rows for that document's storage path.
+
 A response folder with `childrenLoaded: true` describes its direct level. Ancestors with `childrenLoaded: false` are partial paths, not evidence that other siblings were deleted. The client merges those paths into its current tree and accepts async results only for their originating obra. Current selection is resolved against the merged tree rather than a captured pre-request selection.
 
 Automatic OCR failures persist a processing record and refresh the selected folder's derived data. The document can expose its failure and retry action without reloading the page. Retry uses the already stored source, preserving its Storage association, processing identity and source-linked rows.

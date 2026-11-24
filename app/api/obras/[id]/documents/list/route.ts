@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
 	hasDemoCapability,
@@ -18,6 +19,7 @@ type FileSystemItem = {
 	hasFiles?: boolean;
 	fileCount?: number;
 	size?: number;
+	previewVersion?: string;
 	mimetype?: string;
 	storagePath?: string;
 	relativePath?: string;
@@ -97,10 +99,48 @@ type UploaderUserLike = {
 const DOCUMENTS_BUCKET = "obra-documents";
 const STORAGE_LIST_LIMIT = 1000;
 
+type StorageFolderEntry = {
+	name: string;
+	metadata: { size?: number; mimetype?: string } | null;
+	created_at?: string | null;
+	updated_at?: string | null;
+	last_accessed_at?: string | null;
+};
+
 function readNonEmptyString(value: unknown) {
 	if (typeof value !== "string") return null;
 	const trimmed = value.trim();
 	return trimmed.length > 0 ? trimmed : null;
+}
+
+async function listStorageFolder(
+	storage: ReturnType<SupabaseClient["storage"]["from"]>,
+	storagePrefix: string,
+	isRoot: boolean,
+): Promise<{ data: StorageFolderEntry[] | null; error: { message: string } | null }> {
+	const prefix = `${storagePrefix}/`;
+	const sortBy = { column: "name", order: "asc" } as const;
+	const { data } = await storage.listV2({
+		prefix,
+		limit: STORAGE_LIST_LIMIT,
+		with_delimiter: true,
+		sortBy,
+	});
+	if (data && !data.hasNext && (isRoot || data.folders.length > 0 || data.objects.length > 0)) {
+		return {
+			data: [
+				...data.folders.map((folder) => ({
+					name: folder.name.slice(prefix.length),
+					metadata: null,
+				})),
+				...data.objects.map((file) => ({ ...file, name: file.name.slice(prefix.length) })),
+			],
+			error: null,
+		};
+	}
+	// Keep the legacy lookup if V2 fails, for truncated results, and for
+	// empty subfolders that may use legacy casing in their stored paths.
+	return storage.list(storagePrefix, { limit: STORAGE_LIST_LIMIT, sortBy });
 }
 
 function getUserDisplayLabel(user: UploaderUserLike | null | undefined) {
@@ -252,6 +292,7 @@ export async function GET(_request: Request, context: RouteContext) {
 	try {
 		const url = new URL(_request.url);
 		const requestedPath = normalizeFolderPath(url.searchParams.get("path") ?? "");
+		const folderOnly = url.searchParams.get("view") === "folder";
 		const access = await resolveRequestAccessContext();
 		const { supabase, user, tenantId, actorType } = access;
 
@@ -389,10 +430,16 @@ export async function GET(_request: Request, context: RouteContext) {
 
 		const { data: tablas, error: tablasError } = tablasResult;
 		if (tablasError) throw tablasError;
+		const storagePrefix = requestedPath ? `${obraId}/${requestedPath}` : obraId;
+		const storageFolder = listStorageFolder(
+			supabase.storage.from(DOCUMENTS_BUCKET),
+			storagePrefix,
+			!requestedPath,
+		);
 
 		// Second phase: these two depend on the tabla ids resolved above.
 		const tablaIds = (tablas ?? []).map((tabla) => tabla.id as string);
-		const [columnsResult, ocrDocumentsResult] = await Promise.all([
+		const [columnsResult, ocrDocumentsResult, storageResult] = await Promise.all([
 			shouldLoadFileMetadata && tablaIds.length > 0
 				? supabase
 					.from("obra_tabla_columns")
@@ -411,6 +458,7 @@ export async function GET(_request: Request, context: RouteContext) {
 					.like("source_path", scopedStorageLikePrefix)
 					.order("created_at", { ascending: false })
 				: skippedQuery,
+			storageFolder,
 		]);
 
 		const columnsByTabla = new Map<string, OcrColumn[]>();
@@ -728,16 +776,10 @@ export async function GET(_request: Request, context: RouteContext) {
 			return fileItem;
 		};
 
-		const listFolderContents = async (currentRelative: string) => {
-			const storagePrefix = currentRelative ? `${obraId}/${currentRelative}` : obraId;
+		const addStorageFolderContents = (currentRelative: string) => {
 			const parentNode = ensureFolderPath(currentRelative);
 			parentNode.childrenLoaded = true;
-			const { data: folderContents, error: folderError } = await supabase.storage
-				.from(DOCUMENTS_BUCKET)
-				.list(storagePrefix, {
-					limit: STORAGE_LIST_LIMIT,
-					sortBy: { column: "name", order: "asc" },
-				});
+			const { data: folderContents, error: folderError } = storageResult;
 			if (folderError) {
 				warnings.push(`${storagePrefix}: ${folderError.message ?? "storage_list_failed"}`);
 				return;
@@ -767,6 +809,7 @@ export async function GET(_request: Request, context: RouteContext) {
 					size: item.metadata?.size ?? undefined,
 					mimetype: item.metadata?.mimetype ?? undefined,
 				});
+				if (item.updated_at) fileNode.previewVersion = item.updated_at;
 				if (!fileNode.uploadedAt) {
 					const fallbackUploadedAt =
 						typeof item.created_at === "string"
@@ -806,7 +849,7 @@ export async function GET(_request: Request, context: RouteContext) {
 		};
 
 		buildFallbackFiles();
-		await listFolderContents(requestedPath);
+		addStorageFolderContents(requestedPath);
 
 		const sortTree = (node: FileSystemItem) => {
 			node.children?.sort((a, b) => {
@@ -818,9 +861,9 @@ export async function GET(_request: Request, context: RouteContext) {
 		sortTree(root);
 
 		return NextResponse.json({
-			tree: root,
+			...(folderOnly ? {} : { tree: root }),
 			folder: ensureFolderPath(requestedPath),
-			links: ocrLinks,
+			links: folderOnly ? ocrLinks.map((link) => ({ ...link, documents: [] })) : ocrLinks,
 			warnings,
 		});
 	} catch (error) {

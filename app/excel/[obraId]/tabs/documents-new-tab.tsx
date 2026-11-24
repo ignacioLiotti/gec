@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEventHandler, type ReactElement, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
 	AlertCircle,
@@ -31,8 +31,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import FolderFront from "@/components/ui/FolderFront";
 import { NotchTail } from "@/components/ui/notch-tail";
 import type { FormTable as FormTableComponent } from "@/components/form-table/form-table";
+import { useFormTable } from "@/components/form-table/context";
 import type { CellType, ColumnDef, ColumnField, FormTableConfig, FormTableRow, SaveRowsArgs } from "@/components/form-table/types";
 import { cn } from "@/lib/utils";
+import { readDocumentThumbnail, saveDocumentThumbnail } from "@/lib/document-thumbnail-cache";
 import { formatReadableBytes } from "@/lib/tenant-expenses";
 import { evaluateTablaFormula, normalizeFolderName, normalizeFolderPath, toNumericValue } from "@/lib/tablas";
 import type { FileSystemItem, OcrFolderLink, TablaDataRow } from "./file-manager/types";
@@ -67,7 +69,7 @@ const DocumentDataSheet = dynamic(
 ) as DocumentDataSheetComponent;
 
 type DocumentsListPayload = {
-	tree: FileSystemItem | null;
+	tree?: FileSystemItem | null;
 	folder?: FileSystemItem | null;
 	links?: OcrFolderLink[];
 	warnings?: string[];
@@ -77,6 +79,7 @@ type DocumentsListPayload = {
 type BatchAccessPayload = {
 	urls?: Record<string, string>;
 	errors?: Record<string, string>;
+	cacheScope?: string | null;
 };
 
 type DocumentAccessPayload = {
@@ -102,6 +105,7 @@ type ReprocessTableResult = {
 
 type TablaRowsPayload = {
 	rows?: TablaDataRow[];
+	pagination?: { hasNextPage: boolean };
 };
 type UploadPreviewPhase = "uploading" | "extracting" | "settled";
 
@@ -158,11 +162,11 @@ const INITIAL_VISIBLE_FILES = 80;
 const FOLDER_STALE_TIME = 10 * 60 * 1000;
 const TABLE_ROWS_STALE_TIME = 30 * 1000;
 const PDF_THUMBNAIL_MAX_SIZE = 220;
+const THUMBNAIL_CONCURRENCY = 2;
 const EXTRACTION_POLL_INTERVAL_MS = 1200;
 const EXTRACTION_POLL_TIMEOUT_MS = 30_000;
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
-const pdfThumbnailCache = new Map<string, string>();
 let activePdfThumbnailTasks = 0;
 const pendingPdfThumbnailTasks: Array<() => void> = [];
 
@@ -254,10 +258,6 @@ function getRelativeFolderPath(item: FileSystemItem) {
 	return "";
 }
 
-function clonePdfBytes(pdfBytes: Uint8Array) {
-	return pdfBytes.slice();
-}
-
 function loadPdfJs() {
 	pdfJsModulePromise ??= import("pdfjs-dist/legacy/build/pdf.mjs").then((pdfjsModule) => {
 		const pdfjs = pdfjsModule as unknown as PdfJsModule;
@@ -285,7 +285,7 @@ function enqueuePdfThumbnailTask<T>(task: () => Promise<T>): Promise<T> {
 				});
 		};
 
-		if (activePdfThumbnailTasks < 1) {
+	if (activePdfThumbnailTasks < THUMBNAIL_CONCURRENCY) {
 			run();
 		} else {
 			pendingPdfThumbnailTasks.push(run);
@@ -295,7 +295,7 @@ function enqueuePdfThumbnailTask<T>(task: () => Promise<T>): Promise<T> {
 
 async function renderPdfFirstPageThumbnail(pdfBytes: Uint8Array) {
 	const pdfjs = await loadPdfJs();
-	const loadingTask = pdfjs.getDocument({ data: clonePdfBytes(pdfBytes) });
+	const loadingTask = pdfjs.getDocument({ data: pdfBytes });
 	const pdf = await loadingTask.promise;
 
 	try {
@@ -313,11 +313,27 @@ async function renderPdfFirstPageThumbnail(pdfBytes: Uint8Array) {
 		canvas.width = Math.max(1, Math.floor(scaledViewport.width));
 		canvas.height = Math.max(1, Math.floor(scaledViewport.height));
 		await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-		return canvas.toDataURL("image/png");
+		return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.85));
 	} finally {
 		if (typeof pdf.destroy === "function") {
 			await pdf.destroy();
 		}
+	}
+}
+
+async function renderImageThumbnail(image: Blob) {
+	const bitmap = await createImageBitmap(image);
+	try {
+		const scale = Math.min(220 / Math.max(bitmap.width, bitmap.height), 1);
+		const canvas = document.createElement("canvas");
+		canvas.width = Math.max(1, Math.floor(bitmap.width * scale));
+		canvas.height = Math.max(1, Math.floor(bitmap.height * scale));
+		const context = canvas.getContext("2d");
+		if (!context) return null;
+		context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+		return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.85));
+	} finally {
+		bitmap.close();
 	}
 }
 
@@ -390,8 +406,9 @@ function getConditionalClass(value: unknown, config?: Record<string, unknown>): 
 }
 
 async function fetchDocumentsList(obraId: string, path: string) {
-	const suffix = path ? `?path=${encodeURIComponent(path)}` : "";
-	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/list${suffix}`, {
+	const params = new URLSearchParams({ view: "folder" });
+	if (path) params.set("path", path);
+	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/list?${params}`, {
 		cache: "no-store",
 	});
 	const payload = await response.json().catch(() => ({}));
@@ -401,30 +418,87 @@ async function fetchDocumentsList(obraId: string, path: string) {
 	return payload as DocumentsListPayload;
 }
 
-async function fetchBatchAccess(obraId: string, paths: string[]) {
+async function fetchBatchAccess(obraId: string, paths: string[], signal?: AbortSignal): Promise<BatchAccessPayload> {
 	if (paths.length === 0) return {};
 	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/access/batch`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ paths, expiresIn: 3600 }),
+		signal,
 	});
 	const payload = (await response.json().catch(() => ({}))) as BatchAccessPayload;
 	if (!response.ok) {
 		throw new Error((payload as { error?: string })?.error ?? "No se pudieron firmar miniaturas");
 	}
-	return payload.urls ?? {};
+	return payload;
 }
 
-async function fetchTablaRows(obraId: string, tablaId: string) {
+async function fetchThumbnailAccess(obraId: string, paths: string[], signal: AbortSignal) {
+	const batches: BatchAccessPayload[] = [];
+	for (let start = 0; start < paths.length; start += 80) {
+		batches.push(await fetchBatchAccess(obraId, paths.slice(start, start + 80), signal));
+	}
+	const cacheScope = batches.find((batch) => batch.cacheScope)?.cacheScope ?? null;
+	return {
+		urls: Object.assign({}, ...batches.map((batch) => batch.urls)) as Record<string, string>,
+		cacheScope: batches.every((batch) => !batch.cacheScope || batch.cacheScope === cacheScope)
+			? cacheScope
+			: null,
+	};
+}
+
+async function fetchTablaRows(obraId: string, tablaId: string, page: number, signal: AbortSignal, docPath?: string) {
+	const params = new URLSearchParams({ page: String(page), limit: "50", includeCount: "0" });
+	if (docPath) params.set("docPath", docPath);
 	const response = await fetch(
-		`/api/obras/${encodeURIComponent(obraId)}/tablas/${encodeURIComponent(tablaId)}/rows?limit=200&includeCount=0`,
-		{ cache: "no-store" },
+		`/api/obras/${encodeURIComponent(obraId)}/tablas/${encodeURIComponent(tablaId)}/rows?${params}`,
+		{ cache: "no-store", signal },
 	);
 	const payload = (await response.json().catch(() => ({}))) as TablaRowsPayload & { error?: string };
 	if (!response.ok) {
 		throw new Error(payload.error ?? "No se pudieron cargar los datos extraidos");
 	}
-	return Array.isArray(payload.rows) ? payload.rows : [];
+	return {
+		rows: payload.rows ?? [],
+		nextPage: payload.pagination?.hasNextPage ? page + 1 : undefined,
+	};
+}
+
+function LoadMoreTableRows({ pending, failed, onLoad }: {
+	pending: boolean;
+	failed: boolean;
+	onLoad: () => void;
+}) {
+	const { meta } = useFormTable<DocumentsNewTableRow, Record<string, never>>();
+	return (
+		<Button
+			type="button"
+			variant="secondary"
+			size="sm"
+			disabled={pending || meta.hasUnsavedChanges}
+			onClick={onLoad}
+		>
+			{meta.hasUnsavedChanges ? "Guardá para cargar más filas" : pending ? "Cargando filas…" : failed ? "Reintentar carga" : "Cargar más filas"}
+		</Button>
+	);
+}
+
+function mapExtractedRows(rows: TablaDataRow[], columns: OcrFolderLink["columns"]): DocumentsNewTableRow[] {
+	return rows.map((row) => {
+		const data = row.data ?? {};
+		const mapped: DocumentsNewTableRow = { id: row.id };
+		for (const column of columns) mapped[column.fieldKey] = data[column.fieldKey];
+		for (const column of columns) {
+			const formula = typeof column.config?.formula === "string" ? column.config.formula.trim() : "";
+			if (formula) mapped[column.fieldKey] = evaluateTablaFormula(formula, mapped);
+		}
+		if (typeof data.__docFileName === "string") mapped.__docFileName = data.__docFileName;
+		if (typeof data.__docPath === "string") mapped.__docPath = data.__docPath;
+		if (typeof row.source === "string") mapped.source = row.source;
+		if (typeof row.extraction_id === "string") mapped.extraction_id = row.extraction_id;
+		if (typeof row.lineage_row_key === "string") mapped.lineage_row_key = row.lineage_row_key;
+		return mapped;
+	});
 }
 
 async function fetchStoredDocumentBlob(obraId: string, storagePath: string) {
@@ -556,72 +630,105 @@ async function waitForOcrDocumentSettlement({
 }
 function FilePreview({
 	item,
+	obraId,
 	signedUrl,
+	cacheScope,
 }: {
 	item: FileSystemItem;
+	obraId: string;
 	signedUrl?: string;
+	cacheScope?: string | null;
 }) {
 	const ext = getFileExtension(item.name);
 	const storagePath = item.storagePath;
-	const [pdfThumbnailUrl, setPdfThumbnailUrl] = useState<string | null>(
-		storagePath ? pdfThumbnailCache.get(storagePath) ?? null : null,
-	);
+	const previewElement = useRef<HTMLDivElement>(null);
+	const [shouldLoadPreview, setShouldLoadPreview] = useState(() => typeof IntersectionObserver === "undefined");
+	const image = isImageItem(item);
+	const pdf = ext === "pdf";
+	const cacheKey = cacheScope && storagePath && item.previewVersion
+		? JSON.stringify(["cover-220-v1", cacheScope, storagePath, item.previewVersion])
+		: null;
+	const [renderedPreview, setRenderedPreview] = useState<{ source: string; url: string } | null>(null);
+	const [failedSource, setFailedSource] = useState<string | null>(null);
+	const source = cacheKey ?? signedUrl;
 
 	useEffect(() => {
-		if (!signedUrl || !storagePath || ext !== "pdf") return;
-		const cached = pdfThumbnailCache.get(storagePath);
-		if (cached) {
-			return;
-		}
-		let cancelled = false;
-		void enqueuePdfThumbnailTask(async () => {
-			const response = await fetch(signedUrl, { cache: "force-cache" });
-			if (!response.ok) return null;
-			const pdfBytes = new Uint8Array(await response.arrayBuffer());
-			return renderPdfFirstPageThumbnail(pdfBytes);
-		})
-			.then((thumbnail) => {
-				if (!thumbnail || cancelled) return;
-				pdfThumbnailCache.set(storagePath, thumbnail);
-				setPdfThumbnailUrl(thumbnail);
-			})
-			.catch((error) => {
-				if (!cancelled) console.warn("[documents-new] PDF thumbnail failed", error);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [ext, signedUrl, storagePath]);
+		const element = previewElement.current;
+		if (!element || shouldLoadPreview || (!image && !pdf) || typeof IntersectionObserver === "undefined") return;
+		const observer = new IntersectionObserver(([entry]) => {
+			if (!entry?.isIntersecting) return;
+			observer.disconnect();
+			setShouldLoadPreview(true);
+		}, { rootMargin: "160px 0px" });
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [image, pdf, shouldLoadPreview]);
 
-	if (signedUrl && isImageItem(item)) {
-		return (
-			<img
-				src={signedUrl}
-				alt={item.name}
-				className="h-full w-full object-cover"
-				loading="lazy"
-				decoding="async"
-			/>
-		);
-	}
-	if (ext === "pdf" && pdfThumbnailUrl) {
-		return (
-			<img
-				src={pdfThumbnailUrl}
-				alt={item.name}
-				className="h-full w-full object-cover"
-				loading="lazy"
-				decoding="async"
-			/>
-		);
-	}
-	if (ext === "pdf") {
-		return <FileText className="size-8 text-red-500" />;
-	}
-	if (isPreviewable(item)) {
-		return <FileImage className="size-8 text-amber-600" />;
-	}
-	return <File className="size-8 text-stone-500" />;
+	useEffect(() => {
+		if (!shouldLoadPreview || !signedUrl || !source || (!pdf && (!image || !cacheKey))) return;
+		const controller = new AbortController();
+		let objectUrl: string | null = null;
+		async function loadThumbnail() {
+			let accessDenied = false;
+			const cached = cacheKey ? await readDocumentThumbnail(cacheKey) : null;
+			const thumbnail = cached ?? await enqueuePdfThumbnailTask(async () => {
+				if (controller.signal.aborted) return null;
+				if (storagePath) {
+					const params = new URLSearchParams({ path: storagePath, thumbnail: "1" });
+					const cover = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/access?${params}`, {
+						signal: controller.signal,
+					});
+					if (cover.status === 200) return cover.blob();
+					if (cover.status === 401 || cover.status === 403 || cover.status === 404) {
+						accessDenied = true;
+						return null;
+					}
+				}
+				const response = await fetch(signedUrl!, { signal: controller.signal });
+				if (!response.ok) return null;
+				return pdf
+					? renderPdfFirstPageThumbnail(new Uint8Array(await response.arrayBuffer()))
+					: renderImageThumbnail(await response.blob());
+			});
+			if (controller.signal.aborted || accessDenied) return;
+			if (!thumbnail) {
+				setFailedSource(source!);
+				return;
+			}
+			objectUrl = URL.createObjectURL(thumbnail);
+			setRenderedPreview({ source: source!, url: objectUrl });
+			if (!cached && cacheKey) void saveDocumentThumbnail(cacheKey, thumbnail);
+		}
+		void loadThumbnail().catch(() => {
+			if (!controller.signal.aborted) setFailedSource(source);
+		});
+		return () => {
+			controller.abort();
+			if (objectUrl) URL.revokeObjectURL(objectUrl);
+		};
+	}, [cacheKey, image, obraId, pdf, shouldLoadPreview, signedUrl, source, storagePath]);
+
+	const thumbnail = signedUrl && renderedPreview?.source === source
+		? renderedPreview?.url
+		: image && shouldLoadPreview && (!cacheKey || failedSource === source) ? signedUrl : undefined;
+	return (
+		<div ref={previewElement} className="absolute inset-0 flex items-center justify-center">
+			{thumbnail ? (
+				<img
+					src={thumbnail}
+					alt={item.name}
+					className="h-full w-full object-cover"
+					decoding="async"
+				/>
+			) : pdf ? (
+				<FileText className="size-8 text-red-500" />
+			) : isPreviewable(item) ? (
+				<FileImage className="size-8 text-amber-600" />
+			) : (
+				<File className="size-8 text-stone-500" />
+			)}
+		</div>
+	);
 }
 
 function FolderThumbnail({
@@ -678,7 +785,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const searchParams = useSearchParams();
-	const selectedFolderPath = normalizePath(searchParams.get("folder") ?? "");
+	const requestedFile = searchParams.get("file") ?? "";
+	const relativeRequestedFile = requestedFile.startsWith(obraId + "/") ? requestedFile.slice(obraId.length + 1) : requestedFile;
+	const selectedFolderPath = normalizePath(searchParams.get("folder") ?? relativeRequestedFile.split("/").slice(0, -1).join("/"));
+	const openedLinkRef = useRef("");
 	const [search, setSearch] = useState("");
 	const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_FILES);
 	const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -795,50 +905,49 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		? files.filter((item) => item.name.toLowerCase().includes(searchTerm))
 		: files;
 	const visibleFiles = filteredFiles.slice(0, visibleLimit);
-	const previewPaths = visibleFiles
-		.filter((item) => item.storagePath && (isImageItem(item) || isPdfItem(item)))
-		.map((item) => item.storagePath as string)
-		.filter((path) => !signedUrls[path])
-		.slice(0, 80);
-	const previewPathKey = previewPaths.join("\n");
-	const tablaRowsQuery = useQuery({
+	const previewFiles = documentViewMode === "cards"
+		? visibleFiles
+			.filter((item) => item.storagePath && (isImageItem(item) || isPdfItem(item)))
+			.map((item) => [item.storagePath!, item.previewVersion ?? null] as const)
+		: [];
+	const previewAccess = useQuery({
+		queryKey: ["obra", obraId, "documents-new", "preview-access", selectedFolderPath, previewFiles],
+		queryFn: ({ signal }) => fetchThumbnailAccess(obraId, previewFiles.map(([path]) => path), signal),
+		enabled: previewFiles.length > 0,
+		gcTime: 0,
+	});
+	const authorizedPreviews = previewAccess.isError ? undefined : previewAccess.data;
+	const tablaRowsQuery = useInfiniteQuery({
 		queryKey: ["obra", obraId, "documents-new", "tabla-rows", activeOcrTablaId],
-		queryFn: () => fetchTablaRows(obraId, activeOcrTablaId as string),
-		enabled: Boolean(obraId && activeOcrTablaId && (documentViewMode === "table" || selectedDocument?.storagePath)),
+		queryFn: ({ pageParam, signal }) => fetchTablaRows(obraId, activeOcrTablaId!, pageParam, signal),
+		initialPageParam: 1,
+		getNextPageParam: (lastPage) => lastPage.nextPage,
+		enabled: Boolean(obraId && activeOcrTablaId && documentViewMode === "table"),
 		staleTime: TABLE_ROWS_STALE_TIME,
 		refetchOnWindowFocus: false,
 	});
-	const activeTablaRows = useMemo(
-		() => tablaRowsQuery.data ?? activeFolderLink?.rows ?? [],
-		[activeFolderLink?.rows, tablaRowsQuery.data],
+	const selectedDocPath = selectedDocument?.storagePath;
+	const documentRowsQuery = useInfiniteQuery({
+		queryKey: ["obra", obraId, "documents-new", "tabla-rows", activeOcrTablaId, selectedDocPath],
+		queryFn: ({ pageParam, signal }) => fetchTablaRows(obraId, activeOcrTablaId!, pageParam, signal, selectedDocPath),
+		initialPageParam: 1,
+		getNextPageParam: (lastPage) => lastPage.nextPage,
+		enabled: Boolean(obraId && activeOcrTablaId && selectedDocPath && isDocumentDataSheetOpen),
+		staleTime: TABLE_ROWS_STALE_TIME,
+		refetchOnWindowFocus: false,
+	});
+	const tableRows = useMemo(
+		() => mapExtractedRows(tablaRowsQuery.data?.pages.flatMap((page) => page.rows) ?? [], activeFolderLink?.columns ?? []),
+		[activeFolderLink?.columns, tablaRowsQuery.data],
 	);
-	const tableRows = useMemo<DocumentsNewTableRow[]>(() => {
-		const columns = activeFolderLink?.columns ?? [];
-		if (columns.length === 0) return [];
-		return activeTablaRows.map((row) => {
-			const data = (row.data as Record<string, unknown>) ?? {};
-			const mapped: DocumentsNewTableRow = { id: row.id };
-			columns.forEach((column) => {
-				mapped[column.fieldKey] = data[column.fieldKey];
-			});
-			columns.forEach((column) => {
-				const formula =
-					column.config && typeof column.config.formula === "string"
-						? column.config.formula.trim()
-						: "";
-				if (!formula) return;
-				mapped[column.fieldKey] = evaluateTablaFormula(formula, mapped);
-			});
-			if (typeof data.__docFileName === "string") mapped.__docFileName = data.__docFileName;
-			if (typeof data.__docPath === "string") mapped.__docPath = data.__docPath;
-			if (typeof row.source === "string") mapped.source = row.source;
-			if (typeof row.extraction_id === "string") mapped.extraction_id = row.extraction_id;
-			if (typeof row.lineage_row_key === "string") mapped.lineage_row_key = row.lineage_row_key;
-			return mapped;
-		});
-	}, [activeFolderLink?.columns, activeTablaRows]);
+	const selectedDocumentRows = useMemo(
+		() => mapExtractedRows(documentRowsQuery.data?.pages.flatMap((page) => page.rows) ?? [], activeFolderLink?.columns ?? []),
+		[activeFolderLink?.columns, documentRowsQuery.data],
+	);
+	const invalidateExtractedRows = useCallback(() => queryClient.invalidateQueries({
+		queryKey: ["obra", obraId, "documents-new", "tabla-rows"],
+	}), [obraId, queryClient]);
 	const handleSaveTablaRows = useCallback(async ({
-		rows,
 		dirtyRows,
 		deletedRowIds,
 	}: SaveRowsArgs<DocumentsNewTableRow>) => {
@@ -846,20 +955,15 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		const response = await fetch(`/api/obras/${obraId}/tablas/${activeOcrTablaId}/rows`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ rows, dirtyRows, deletedRowIds }),
+			body: JSON.stringify({ dirtyRows, deletedRowIds }),
 		});
 		if (!response.ok) {
 			const text = await response.text();
 			throw new Error(text || "No se pudieron guardar los cambios");
 		}
-		await Promise.all([
-			queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] }),
-			queryClient.invalidateQueries({
-				queryKey: ["obra", obraId, "documents-new", "tabla-rows", activeOcrTablaId],
-			}),
-		]);
+		await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new", "tabla-rows"] });
 	}, [activeOcrTablaId, obraId, queryClient]);
-	const ocrTableConfig = useMemo<FormTableConfig<DocumentsNewTableRow, Record<string, never>> | null>(() => {
+	const extractedTableConfig = useMemo<FormTableConfig<DocumentsNewTableRow, Record<string, never>> | null>(() => {
 		const columns = activeFolderLink?.columns ?? [];
 		if (!activeOcrTablaId || columns.length === 0) return null;
 		const tableColumns: ColumnDef<DocumentsNewTableRow>[] = columns.map((column) => {
@@ -877,50 +981,56 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				cellClassName: (row) => getConditionalClass(row[column.fieldKey], column.config),
 			};
 		});
-		const emptyStateMessage = tablaRowsQuery.isFetching
-			? "Cargando datos extraidos..."
-			: "Sin datos extraidos todavia.";
 		return {
 			tableId: `documents-new-ocr-${obraId}-${activeOcrTablaId}`,
 			editMode: "active-cell",
 			onSave: handleSaveTablaRows,
 			allowAddRows: false,
 			allowDeleteRows: true,
-			searchPlaceholder: "Buscar en esta tabla",
+			searchPlaceholder: "Buscar en filas cargadas",
 			columns: tableColumns,
-			defaultRows: tableRows,
-			disablePagination: true,
-			emptyStateMessage,
+			defaultPageSize: 25,
+			pageSizeOptions: [10, 25, 50],
 			showActionsColumn: true,
 			showRowNumbers: true,
 			rowNumberColumnWidth: 42,
 			actionsColumnWidth: 88,
 			showInlineSearch: true,
 			toolbarMode: "default",
-			hideFooterPaginationSummary: true,
 			enableColumnResizing: true,
 		};
-	}, [activeFolderLink?.columns, activeOcrTablaId, handleSaveTablaRows, obraId, tableRows, tablaRowsQuery.isFetching]);
-	const selectedDocumentRows = useMemo(() => {
-		const docPath = selectedDocument?.storagePath ?? null;
-		if (!docPath) return [] as DocumentsNewTableRow[];
-		return tableRows.filter((row) => row.__docPath === docPath);
-	}, [selectedDocument?.storagePath, tableRows]);
-	const documentDataTableConfig = useMemo<FormTableConfig<DocumentsNewTableRow, Record<string, never>> | null>(() => {
-		if (!ocrTableConfig || !selectedDocument) return null;
-		return {
-			...ocrTableConfig,
-			tableId: `${ocrTableConfig.tableId}-document-${selectedDocument.id}`,
-			readOnly: true,
-			onSave: undefined,
-			allowDeleteRows: false,
-			showActionsColumn: false,
-			defaultRows: selectedDocumentRows,
-			emptyStateMessage: tablaRowsQuery.isFetching
-				? "Cargando datos extraidos..."
-				: "Este documento no tiene datos extraidos.",
-		};
-	}, [ocrTableConfig, selectedDocument, selectedDocumentRows, tablaRowsQuery.isFetching]);
+	}, [activeFolderLink?.columns, activeOcrTablaId, handleSaveTablaRows, obraId]);
+	const ocrTableConfig = extractedTableConfig && {
+		...extractedTableConfig,
+		defaultRows: tableRows,
+		emptyStateMessage: tablaRowsQuery.isLoading ? "Cargando datos extraídos…" : "Sin datos extraídos todavía.",
+		toolbarActions: tablaRowsQuery.hasNextPage && (
+			<LoadMoreTableRows
+				pending={tablaRowsQuery.isFetching}
+				failed={tablaRowsQuery.isFetchNextPageError}
+				onLoad={() => void tablaRowsQuery.fetchNextPage()}
+			/>
+		),
+	};
+	const documentDataTableConfig = extractedTableConfig && selectedDocument && {
+		...extractedTableConfig,
+		tableId: `${extractedTableConfig.tableId}-document-${selectedDocument.id}`,
+		readOnly: true,
+		onSave: undefined,
+		allowDeleteRows: false,
+		showActionsColumn: false,
+		defaultRows: selectedDocumentRows,
+		emptyStateMessage: documentRowsQuery.error?.message ?? (documentRowsQuery.isLoading
+			? "Cargando datos extraídos…" : "Este documento no tiene datos extraídos."),
+		toolbarActions: documentRowsQuery.hasNextPage && (
+			<LoadMoreTableRows
+				pending={documentRowsQuery.isFetching}
+				failed={documentRowsQuery.isFetchNextPageError}
+				onLoad={() => void documentRowsQuery.fetchNextPage()}
+			/>
+		),
+	};
+	const canShowSelectedDocumentData = Boolean(selectedDocPath && documentDataTableConfig);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1020,26 +1130,10 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			}
 		};
 	}, []);
-	useEffect(() => {
-		let cancelled = false;
-		if (!previewPathKey) return;
-		const paths = previewPathKey.split("\n").filter(Boolean);
-		void fetchBatchAccess(obraId, paths)
-			.then((urls) => {
-				if (cancelled) return;
-				setSignedUrls((current) => ({ ...current, ...urls }));
-			})
-			.catch((error) => {
-				console.error("[documents-new] thumbnail batch failed", error);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [obraId, previewPathKey]);
 
 	function updateFolderPath(nextFolderPath: string) {
 		const params = new URLSearchParams(searchParams?.toString?.() || "");
-		params.set("tab", "documentos-new");
+		params.set("tab", "documentos");
 		params.delete("file");
 		const normalizedNextFolderPath = normalizePath(nextFolderPath);
 		if (normalizedNextFolderPath) {
@@ -1252,7 +1346,9 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	}, [isUploadingFiles, uploadFilesToCurrentFolder]);
 
 	const totalBytes = files.reduce((sum, item) => sum + (typeof item.size === "number" ? item.size : 0), 0);
-	const folderCountLabel = documentViewMode === "table" && isOcrFolder ? `${tableRows.length} filas` : `${files.length} archivos`;
+	const folderCountLabel = documentViewMode === "table" && isOcrFolder
+		? `${tableRows.length} filas${tablaRowsQuery.hasNextPage ? " cargadas" : ""}`
+		: `${files.length} archivos`;
 
 	const handleDownloadAllFromFolder = useCallback(async () => {
 		if (isDownloadingAll) return;
@@ -1358,10 +1454,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			setReprocessAllProgress({ done: index + 1, total: reprocessableFiles.length, errors: errorCount });
 		}
 
-		await folderQuery.refetch();
-		if (activeOcrTablaId) {
-			await tablaRowsQuery.refetch();
-		}
+		await Promise.all([folderQuery.refetch(), invalidateExtractedRows()]);
 
 		if (successCount > 0) {
 			toast.success(`${successCount} documento${successCount === 1 ? "" : "s"} reprocesado${successCount === 1 ? "" : "s"}.`);
@@ -1373,7 +1466,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		setIsReprocessingAll(false);
 		setReprocessAllProgress(null);
 		setIsReprocessAllConfirmOpen(false);
-	}, [activeFolderLinks, activeOcrTablaId, folderQuery, obraId, reprocessableFiles, tablaRowsQuery]);
+	}, [activeFolderLinks, folderQuery, invalidateExtractedRows, obraId, reprocessableFiles]);
 
 	const handleCancelReprocessAll = useCallback(() => {
 		reprocessAllAbortRef.current = true;
@@ -1433,10 +1526,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 					toast.success("Documento reprocesado.");
 				}
 
-				await folderQuery.refetch();
-				if (activeOcrTablaId) {
-					await tablaRowsQuery.refetch();
-				}
+				await Promise.all([folderQuery.refetch(), invalidateExtractedRows()]);
 			} catch (error) {
 				console.error("[documents-new] Error reprocessing document", document.name, error);
 				toast.error("No se pudo reprocesar el documento.");
@@ -1444,7 +1534,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				setRetryingDocumentId(null);
 			}
 		},
-		[activeFolderLinks, activeOcrTablaId, folderQuery, obraId, tablaRowsQuery],
+		[activeFolderLinks, folderQuery, invalidateExtractedRows, obraId],
 	);
 
 	const handleDownloadDocument = useCallback(
@@ -1478,7 +1568,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				return;
 			}
 
-			const cachedSignedUrl = signedUrls[document.storagePath];
+			const cachedSignedUrl = authorizedPreviews?.urls?.[document.storagePath] ?? signedUrls[document.storagePath];
 			if (cachedSignedUrl) {
 				setPreviewUrl(cachedSignedUrl);
 				return;
@@ -1486,8 +1576,8 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 
 			setPreviewUrl(null);
 			try {
-				const urls = await fetchBatchAccess(obraId, [document.storagePath]);
-				const signedUrl = urls[document.storagePath] ?? null;
+				const access = await fetchBatchAccess(obraId, [document.storagePath]);
+				const signedUrl = access.urls?.[document.storagePath] ?? null;
 				if (previewRequestIdRef.current !== requestId) return;
 				if (!signedUrl) {
 					toast.error("No se pudo cargar la previsualizacion del documento.");
@@ -1501,8 +1591,20 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				toast.error("No se pudo cargar la previsualizacion del documento.");
 			}
 		},
-		[clearUploadPreview, obraId, signedUrls],
+		[authorizedPreviews, clearUploadPreview, obraId, signedUrls],
 	);
+
+	useEffect(() => {
+		if (!relativeRequestedFile) {
+			openedLinkRef.current = "";
+			return;
+		}
+		if (openedLinkRef.current === relativeRequestedFile) return;
+		const match = files.find((item) => item.storagePath === obraId + "/" + relativeRequestedFile);
+		if (!match) return;
+		openedLinkRef.current = relativeRequestedFile;
+		void handleOpenDocumentPreview(match);
+	}, [files, handleOpenDocumentPreview, obraId, relativeRequestedFile]);
 
 	const handleDocumentSheetOpenChange = useCallback((open: boolean) => {
 		setIsDocumentSheetOpen(open);
@@ -1516,12 +1618,12 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	}, [clearUploadPreview]);
 
 	const toggleDocumentDataSheet = useCallback(() => {
-		if (!documentDataTableConfig) return;
+		if (!canShowSelectedDocumentData) return;
 		setIsDocumentDataSheetOpen((current) => !current);
-	}, [documentDataTableConfig]);
+	}, [canShowSelectedDocumentData]);
 
 	const resolveDeleteStoragePath = useCallback((item: FileSystemItem) => {
-		if (item.storagePath) return normalizeFolderPath(item.storagePath);
+		if (item.storagePath) return item.storagePath;
 		const relativePath = getRelativeFolderPath(item);
 		if (!relativePath) return item.type === "folder" ? obraId : "";
 		return normalizeFolderPath(`${obraId}/${relativePath}`);
@@ -1573,9 +1675,6 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 				handleDocumentSheetOpenChange(false);
 			}
 			await queryClient.invalidateQueries({ queryKey: ["obra", obraId, "documents-new"] });
-			if (activeOcrTablaId) {
-				await tablaRowsQuery.refetch();
-			}
 			toast.success(itemToDelete.type === "folder" ? "Carpeta enviada a papelera." : "Archivo enviado a papelera.");
 			setIsDeleteDialogOpen(false);
 			setItemToDelete(null);
@@ -1585,7 +1684,6 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			setDeletingItemId(null);
 		}
 	}, [
-		activeOcrTablaId,
 		deletingItemId,
 		handleDocumentSheetOpenChange,
 		itemToDelete,
@@ -1593,7 +1691,6 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 		queryClient,
 		resolveDeleteStoragePath,
 		selectedDocument?.id,
-		tablaRowsQuery,
 	]);
 
 	const selectedDocumentIndex = selectedDocument
@@ -1608,7 +1705,6 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	const documentPositionLabel =
 		selectedDocumentIndex >= 0 ? `${selectedDocumentIndex + 1}/${files.length}` : null;
 	const canReprocessSelectedDocument = Boolean(selectedDocument?.storagePath);
-	const canShowSelectedDocumentData = Boolean(selectedDocument?.storagePath && documentDataTableConfig);
 	const isUploadPreviewSelected = Boolean(
 		uploadPreview &&
 		selectedDocument &&
@@ -1686,9 +1782,12 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 							>
 								<span className="absolute top-0 right-0 z-10 border-8 border-stone-300 bg-stone-100" />
 								<span className="absolute top-[-1px] right-[-1px] z-10 border-8 border-b-transparent border-l-transparent border-white bg-stone-200" />
-								<div className="absolute inset-0 top-0 flex items-center justify-center">
-									<FilePreview item={item} signedUrl={item.storagePath ? signedUrls[item.storagePath] : undefined} />
-								</div>
+								<FilePreview
+									item={item}
+									obraId={obraId}
+									signedUrl={item.storagePath ? authorizedPreviews?.urls?.[item.storagePath] : undefined}
+									cacheScope={authorizedPreviews?.cacheScope}
+								/>
 								<div className="absolute right-2 top-2 z-20">{renderOcrStatusBadge(item)}</div>
 								<div className="relative z-20 mt-auto w-full bg-stone-200/60 px-1 py-1 backdrop-blur-sm">
 									<p className="truncate text-center text-sm text-stone-700">{item.name}</p>
@@ -1718,7 +1817,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 			<p>Esta carpeta de datos todavia no tiene columnas configuradas.</p>
 			<p>Configuralas desde la pestana Tablas para ver los datos aca.</p>
 		</div>
-	) : tablaRowsQuery.isError ? (
+	) : tablaRowsQuery.isError && !tablaRowsQuery.data ? (
 		<div className="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
 			{tablaRowsQuery.error instanceof Error ? tablaRowsQuery.error.message : "No se pudieron cargar los datos extraidos"}
 		</div>
@@ -1904,7 +2003,7 @@ export function ObraDocumentsNewTab({ obraId }: { obraId: string }) {
 	);
 
 	return (
-		<TabsContent value="documentos-new" className="space-y-4 ">
+		<TabsContent value="documentos" className="space-y-4 ">
 			<section className={cn("min-h-[640px] overflow-hidden rounded-xl ", !isOcrFolder && "rounded-xl ")}>
 				<div className="-mb-1 mx-[1px]">
 					{isOcrFolder ? ocrHeader : normalHeader}

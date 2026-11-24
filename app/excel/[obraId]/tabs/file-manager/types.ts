@@ -23,6 +23,7 @@ export type FileSystemItem = {
 	ocrTablaRows?: TablaDataRow[];
 	extractedData?: Record<string, unknown>[];
 	size?: number;
+	previewVersion?: string;
 	mimetype?: string;
 	dataId?: string;
 	storagePath?: string;

@@ -353,7 +353,7 @@ export default async function RootLayout({
 				<QueryClientProvider>
 					<LazyMotionProvider>
 						<DomainMigrationGuard />
-						<SupabaseAuthListener />
+						<SupabaseAuthListener activeTenantId={userRoles.tenantId ?? null} />
 						<AuthController />
 						<AuthGate allowAnonymous={access.actorType === "demo"} />
 						<Toaster position="bottom-right" richColors />

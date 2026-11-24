@@ -5,7 +5,9 @@ import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
   applyTemplateAliasInputData,
   applyTemplateFormulaInputData,
+  applyTemplateReferenceInputData,
   buildGeneratedDocumentFileName,
+  getTemplateReferenceSources,
   buildInitialInputData,
   normalizeDocumentType,
   normalizeFolderGenerationPath,
@@ -14,10 +16,13 @@ import {
   renderDocumentHtml,
   renderTemplateFileNamePattern,
   validateTemplateInput,
+  validateTemplateReferences,
   withNumericSuffix,
 } from "@/lib/document-generation";
+import { loadReferenceRecords } from "@/lib/document-reference-sources";
 import {
   assertWorkInTenant,
+  loadTemplates,
   canEditGeneratedDocument,
   insertGeneratedDocumentEvent,
   loadDocumentGenerationPermissions,
@@ -329,13 +334,17 @@ export async function POST(request: NextRequest) {
 
     const { data: template, error: templateError } = await supabase
       .from("document_generation_templates")
-      .select("id, name, version, document_type, target_folder_path, schema, content_html")
+      .select("id, key, name, version, document_type, target_folder_path, schema, content_html")
       .eq("id", templateId)
       .eq("status", "active")
       .maybeSingle();
     if (templateError) throw templateError;
     if (!template) {
       return NextResponse.json({ error: "No hay una plantilla activa para generar este tipo de documento." }, { status: 400 });
+    }
+
+    if (!editingGeneratedDocument && !(await loadTemplates(accessContext, template.key)).some((entry) => entry.id === templateId)) {
+      return NextResponse.json({ error: "La plantilla no está publicada para esta organización." }, { status: 409 });
     }
 
     const templateDocumentType = normalizeDocumentType(template.document_type);
@@ -357,11 +366,24 @@ export async function POST(request: NextRequest) {
           documentType,
           schema,
         });
-    const hydratedInputData = applyTemplateFormulaInputData(schema, applyTemplateAliasInputData(
+    // Linked values are resolved here too, so a generated document never
+    // depends on lookups or copies computed only by the browser.
+    const referenceSources = getTemplateReferenceSources(schema);
+    const referenceRecords = referenceSources.length
+      ? await loadReferenceRecords(accessContext, { sources: referenceSources, workId })
+      : {};
+    const hydratedInputData = applyTemplateFormulaInputData(schema, applyTemplateReferenceInputData(
       schema,
-      refreshTemplateSequenceInputData(schema, baseInputData, nextSequenceNumber),
+      applyTemplateAliasInputData(
+        schema,
+        refreshTemplateSequenceInputData(schema, baseInputData, nextSequenceNumber),
+      ),
+      referenceRecords,
     ));
-    const validationErrors = validateTemplateInput(schema, hydratedInputData);
+    const validationErrors = [
+      ...validateTemplateInput(schema, hydratedInputData),
+      ...validateTemplateReferences(schema, hydratedInputData, referenceRecords),
+    ];
     if (validationErrors.length > 0) {
       return NextResponse.json(
         { error: "No se puede generar documento con campos obligatorios incompletos.", validationErrors },

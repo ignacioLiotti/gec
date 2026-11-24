@@ -4,8 +4,39 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canDeleteGeneratedDocument,
   canEditGeneratedDocument,
+  loadTemplateCatalog,
+  loadTemplates,
+  resolveGenerationContext,
   validateGenerationTarget,
 } from "@/lib/document-generation-server";
+import type { DocumentTemplateSummary } from "@/lib/document-generation";
+
+it("opens the latest purchase order template and pins an existing draft to its original version", () => {
+  const initial: DocumentTemplateSummary = {
+    id: "order-original",
+    key: "purchase-order",
+    name: "Orden de compra",
+    description: null,
+    documentType: "PURCHASE_ORDER",
+    targetFolderPath: "ordenes",
+    version: 1,
+    status: "active",
+    isSystem: false,
+    tenantScoped: true,
+    schema: { fields: [] },
+    contentHtml: "<p>Versión original</p>",
+  };
+  const current = { ...initial, id: "order-updated", version: 2 };
+  const args = {
+    folderConfigs: [],
+    folderPath: "ordenes",
+    documentType: "PURCHASE_ORDER",
+    templates: [initial, current],
+  };
+  expect(resolveGenerationContext(args).filteredTemplates.map((item) => item.id)).toEqual([current.id]);
+  expect(resolveGenerationContext(args).selectedTemplate?.id).toBe(current.id);
+  expect(resolveGenerationContext({ ...args, preferredTemplateId: initial.id }).selectedTemplate?.id).toBe(initial.id);
+});
 
 function createSupabaseTableMock(
   rowsByTable: Record<string, Array<Record<string, unknown>>>,
@@ -127,5 +158,24 @@ describe("generation target validation", () => {
         },
       ),
     ).resolves.toEqual({ valid: true, error: null });
+  });
+});
+
+describe("published template catalog", () => {
+  it("keeps work-in-progress overrides and versions out of generation", async () => {
+    const row = { version: 1, status: "active", target_folder_path: null, schema: { fields: [] }, content_html: "<p>Ejemplo</p>" };
+    const supabase = createSupabaseTableMock({ document_generation_templates: [
+      { ...row, id: "system-invoice", name: "Factura", key: "invoice", document_type: "INVOICE", tenant_id: null },
+      { ...row, id: "own-invoice", name: "Factura", key: "invoice", document_type: "INVOICE", tenant_id: "own", status: "draft" },
+      { ...row, id: "old-certificate", name: "Certificado", key: "cert", document_type: "CERTIFICATE", tenant_id: "own" },
+      { ...row, id: "next-certificate", name: "Certificado", key: "cert", document_type: "CERTIFICATE", tenant_id: "own", status: "draft", version: 2 },
+      { ...row, id: "own-order", name: "Orden de compra", key: "purchase-order", document_type: "PURCHASE_ORDER", tenant_id: "own" },
+      { ...row, id: "foreign-order", name: "Otra orden", key: "foreign", document_type: "PURCHASE_ORDER", tenant_id: "foreign" },
+    ] });
+    const access = { supabase, tenantId: "own", userId: "owner" };
+    expect((await loadTemplates(access)).map((template) => template.id)).toEqual(["own-order"]);
+    expect((await loadTemplateCatalog(access)).map((template) => template.id)).toEqual([
+      "old-certificate", "next-certificate", "own-invoice", "own-order",
+    ]);
   });
 });

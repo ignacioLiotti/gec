@@ -5,9 +5,13 @@ import { resolveRequestAccessContext } from "@/lib/demo-session";
 import {
   normalizeDocumentType,
   normalizeFolderGenerationPath,
+  normalizeTemplateLookup,
+  normalizeTemplateReference,
   normalizeTemplateSchema,
   type TemplateField,
 } from "@/lib/document-generation";
+import { loadReferenceSourceCatalog } from "@/lib/document-reference-sources";
+import { compileTemplateSpec, validateTemplateSpec, type TemplateSpec } from "@/lib/document-template-spec";
 import {
   loadDocumentGenerationPermissions,
   loadFolderFieldSuggestions,
@@ -18,6 +22,7 @@ import { normalizeFieldKey } from "@/lib/tablas";
 
 type UpdateTemplateBody = {
   templateId?: string;
+  publishVersion?: boolean;
   name?: string;
   description?: string | null;
   documentType?: string;
@@ -25,11 +30,45 @@ type UpdateTemplateBody = {
   status?: string;
   schema?: unknown;
   contentHtml?: string;
+  /** Template Spec v1. When present it replaces name, type, folder, schema and HTML. */
+  spec?: unknown;
 };
 
 type CreateTemplateBody = Omit<UpdateTemplateBody, "templateId">;
 
 const TEMPLATE_STATUSES = new Set(["draft", "active", "inactive", "archived"]);
+
+type AccessForCatalog = Parameters<typeof loadReferenceSourceCatalog>[0];
+
+/**
+ * Validates and compiles a spec body in place. Returns a 422 response with
+ * the errors by path when the spec is invalid.
+ */
+async function applySpecBody<T extends CreateTemplateBody>(access: AccessForCatalog, body: T) {
+  if (body.spec === undefined) return { body, specApplied: false as const };
+  const validation = validateTemplateSpec(body.spec, await loadReferenceSourceCatalog(access));
+  if (!validation.ok) {
+    return {
+      response: NextResponse.json(
+        { error: "La especificación de la plantilla tiene errores.", ...validation },
+        { status: 422 },
+      ),
+    };
+  }
+  const compiled = compileTemplateSpec(body.spec as TemplateSpec);
+  return {
+    specApplied: true as const,
+    body: {
+      ...body,
+      name: compiled.name,
+      description: compiled.description,
+      documentType: compiled.documentType,
+      targetFolderPath: compiled.targetFolderPath,
+      schema: compiled.schema,
+      contentHtml: compiled.contentHtml,
+    },
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -96,7 +135,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sin permisos para crear plantillas." }, { status: 403 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as CreateTemplateBody;
+    const specResult = await applySpecBody(accessContext, (await request.json().catch(() => ({}))) as CreateTemplateBody);
+    if ("response" in specResult) return specResult.response;
+    const body = specResult.body;
     const name = typeof body.name === "string" && body.name.trim().length > 0 ? body.name.trim() : null;
     const documentType = normalizeDocumentType(body.documentType);
     const status =
@@ -145,6 +186,7 @@ export async function POST(request: NextRequest) {
       fields: normalizedFields,
       documentNumberFieldKey: schema.documentNumberFieldKey ?? null,
       fileNamePattern: schema.fileNamePattern ?? null,
+      spec: specResult.specApplied ? schema.spec ?? null : null,
     };
     const templateKey = buildTenantTemplateKey(documentType);
 
@@ -179,6 +221,78 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PATCH(request: NextRequest) {
+  try {
+    const access = await resolveRequestAccessContext();
+    const { supabase, user, tenantId } = access;
+    if (access.actorType !== "user" || !user || !tenantId) {
+      return NextResponse.json({ error: "Necesitás una sesión activa." }, { status: 401 });
+    }
+
+    const permissions = await loadDocumentGenerationPermissions({
+      supabase, tenantId, userId: user.id, permissionSimulation: access.permissionSimulation,
+    });
+    if (!permissions.canManageTemplates) {
+      return NextResponse.json({ error: "Sin permisos para cambiar el estado de las plantillas." }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const templateId = typeof body?.templateId === "string" ? body.templateId : "";
+    const status = body?.status;
+    if (!templateId || (status !== "active" && status !== "draft")) {
+      return NextResponse.json({ error: "Elegí una plantilla y un estado válido." }, { status: 400 });
+    }
+
+    const accessFilter = `tenant_id.is.null,tenant_id.eq.${tenantId}`;
+    const { data: template, error } = await supabase.from("document_generation_templates")
+      .select("id, tenant_id, key, version, name, description, document_type, target_folder_path, schema, content_html, status")
+      .eq("id", templateId)
+      .or(accessFilter)
+      .maybeSingle();
+    if (error) throw error;
+    if (!template) return NextResponse.json({ error: "Plantilla no encontrada." }, { status: 404 });
+
+    const { data: versions, error: versionError } = await supabase.from("document_generation_templates")
+      .select("id, tenant_id, version")
+      .eq("key", template.key)
+      .or(accessFilter)
+      .order("version", { ascending: false })
+      .order("tenant_id", { nullsFirst: false })
+      .limit(1);
+    if (versionError) throw versionError;
+    if (versions[0]?.id !== template.id) {
+      return NextResponse.json({ error: "La plantilla cambió. Recargá para ver la versión actual." }, { status: 409 });
+    }
+
+    if (template.status === status) return await respondWithTemplate(supabase, tenantId, template.id);
+    const change = template.tenant_id === tenantId
+      ? supabase.from("document_generation_templates").update({ status }).eq("id", template.id).eq("tenant_id", tenantId)
+      : supabase.from("document_generation_templates").insert({
+          tenant_id: tenantId,
+          name: template.name,
+          description: template.description,
+          document_type: template.document_type,
+          target_folder_path: template.target_folder_path,
+          key: template.key,
+          version: template.version,
+          schema: template.schema,
+          content_html: template.content_html,
+          status,
+          is_system: false,
+          created_by: user.id,
+        });
+    const { data: changed, error: changeError } = await change.select("id").single();
+    if (changeError?.code === "23505") {
+      return NextResponse.json({ error: "La plantilla cambió. Recargá para ver la versión actual." }, { status: 409 });
+    }
+    if (changeError) throw changeError;
+    return await respondWithTemplate(supabase, tenantId, changed.id);
+  } catch (error) {
+    console.error("[document-generation/templates:patch]", error);
+    return NextResponse.json({ error: "No se pudo cambiar el estado de la plantilla." }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest) {
   try {
     const access = await resolveRequestAccessContext();
@@ -202,7 +316,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Sin permisos para editar plantillas." }, { status: 403 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as UpdateTemplateBody;
+    const specResult = await applySpecBody(accessContext, (await request.json().catch(() => ({}))) as UpdateTemplateBody);
+    if ("response" in specResult) return specResult.response;
+    const body = specResult.body;
     const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
     if (!templateId) {
       return NextResponse.json({ error: "Template requerida." }, { status: 400 });
@@ -244,18 +360,58 @@ export async function PUT(request: NextRequest) {
     }
 
     const schema = normalizeTemplateSchema(body.schema);
-    const normalizedFields = schema.fields.map((field, index) => normalizeTemplateField(field, index));
+    // Published revisions preserve the field keys used by the existing HTML and drafts.
+    const normalizedFields = body.publishVersion
+      ? schema.fields
+      : schema.fields.map((field, index) => normalizeTemplateField(field, index));
     const uniqueKeys = new Set(normalizedFields.map((field) => field.key));
     if (uniqueKeys.size !== normalizedFields.length) {
       return NextResponse.json({ error: "Los campos deben tener key unica." }, { status: 400 });
     }
 
     const targetFolderPath = normalizeFolderGenerationPath(body.targetFolderPath);
+    // A save without a spec edits the HTML directly, so a stored spec would be stale.
     const schemaPayload = {
       fields: normalizedFields,
       documentNumberFieldKey: schema.documentNumberFieldKey ?? null,
       fileNamePattern: schema.fileNamePattern ?? null,
+      spec: specResult.specApplied ? schema.spec ?? null : null,
     };
+
+    if (body.publishVersion === true) {
+      const { data: latest, error: latestError } = await supabase
+        .from("document_generation_templates")
+        .select("version")
+        .eq("tenant_id", tenantId)
+        .eq("key", baseTemplate.key)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestError) throw latestError;
+      const { data: published, error: publishError } = await supabase
+        .from("document_generation_templates")
+        .insert({
+          tenant_id: tenantId,
+          key: baseTemplate.key,
+          name,
+          description: typeof body.description === "string" ? body.description.trim() || null : null,
+          document_type: documentType,
+          target_folder_path: targetFolderPath || null,
+          version: Math.max(Number(baseTemplate.version) || 1, Number(latest?.version) || 0) + 1,
+          status: "active",
+          is_system: false,
+          created_by: user?.id ?? null,
+          schema: schemaPayload,
+          content_html: contentHtml,
+        })
+        .select("id")
+        .single();
+      if (publishError?.code === "23505") {
+        return NextResponse.json({ error: "Se publicó otra versión al mismo tiempo. Volvé a cargar las plantillas." }, { status: 409 });
+      }
+      if (publishError) throw publishError;
+      return await respondWithTemplate(supabase, tenantId, published.id);
+    }
 
     if (baseTemplate.tenant_id === tenantId) {
       const { data: updated, error: updateError } = await supabase
@@ -405,6 +561,8 @@ function normalizeTemplateField(field: TemplateField, index: number): TemplateFi
       type === "table" && Array.isArray(field.columns)
         ? field.columns.map((column, columnIndex) => normalizeTemplateField(column, columnIndex))
         : undefined,
+    reference: type === "reference" ? normalizeTemplateReference(field.reference) : undefined,
+    lookup: type === "lookup" ? normalizeTemplateLookup(field.lookup) : undefined,
   };
 }
 

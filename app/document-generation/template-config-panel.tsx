@@ -5,6 +5,7 @@ import { Copy, Loader2, Plus, Save, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  applyTemplateFormulaInputData,
   DOCUMENT_TYPE_LABELS,
   formatDocumentTypeLabel,
   type DocumentTemplateSummary,
@@ -18,6 +19,7 @@ import {
   type TemplateOptionSource,
   type TemplateSelectMode,
 } from "@/lib/document-generation";
+import { PurchaseOrderRecipePanel } from "./purchase-order-recipe-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,6 +98,8 @@ const FIELD_TYPE_LABELS: Record<TemplateFieldType, string> = {
   select: "Lista",
   work_reference: "Obra",
   supplier_reference: "Proveedor",
+  reference: "Vínculo",
+  lookup: "Dato traído",
 };
 
 const SELECT_MODE_OPTIONS: Array<{ value: TemplateSelectMode; label: string }> = [
@@ -576,6 +580,57 @@ function useDocumentTemplateConfig(workId: string) {
   const [rightPanelMode, setRightPanelMode] = useState<"preview" | "fields" | "html">("preview");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishingIssuers, setPublishingIssuers] = useState(false);
+  const [changingTemplateStatus, setChangingTemplateStatus] = useState(false);
+
+  async function changeTemplateStatus(template: DocumentTemplateSummary) {
+    const status = template.status === "active" ? "draft" : "active";
+    setChangingTemplateStatus(true);
+    try {
+      const response = await fetch("/api/document-generation/templates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: template.id, status }),
+      });
+      const payload = (await response.json()) as {
+        template?: DocumentTemplateSummary | null;
+        templates?: DocumentTemplateSummary[];
+        error?: string;
+      };
+      if (!response.ok || !payload.templates || !payload.template) {
+        throw new Error(payload.error || "No se pudo cambiar el estado.");
+      }
+      const updatedTemplate = payload.template;
+      setTemplates(payload.templates);
+      setSelectedTemplateId((current) => current === template.id ? updatedTemplate.id : current);
+      setDraft((current) => current?.id === template.id ? { ...current, id: updatedTemplate.id, status } : current);
+      toast.success(status === "draft" ? "Plantilla guardada como borrador." : "Plantilla publicada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo cambiar el estado.");
+    } finally {
+      setChangingTemplateStatus(false);
+    }
+  }
+
+
+  const canPublishIssuers = templates.some((template) =>
+    template.tenantScoped && template.status === "active" && template.key === "purchase-order-default" && template.contentHtml.includes('class="company-copy"'),
+  ) && !["purchase-order-concret-libres", "purchase-order-libresmat"].every((key) => templates.some((template) => template.key === key));
+
+  async function publishIssuers() {
+    setPublishingIssuers(true);
+    try {
+      const response = await fetch("/api/document-generation/templates/issuers", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "No se pudieron publicar las variantes.");
+      setTemplates(result.templates);
+      toast.success("Plantillas de Concret y Libresmat disponibles.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron publicar las variantes.");
+    } finally {
+      setPublishingIssuers(false);
+    }
+  }
   const [creatingDocumentType, setCreatingDocumentType] = useState(false);
   const [newDocumentTypeDraft, setNewDocumentTypeDraft] = useState<NewDocumentTypeDraft>(
     createEmptyDocumentTypeDraft,
@@ -636,7 +691,11 @@ function useDocumentTemplateConfig(workId: string) {
 
   const previewHtml = useMemo(() => {
     if (!draft) return "";
-    return renderDocumentHtml(draft.contentHtml, buildPreviewData(draft.fields), {
+    const examples = buildPreviewData(draft.fields);
+    const previewData = draft.documentType === "PURCHASE_ORDER"
+      ? applyTemplateFormulaInputData({ fields: draft.fields }, examples)
+      : examples;
+    return renderDocumentHtml(draft.contentHtml, previewData, {
       workName: "Obra de ejemplo",
       generatedAt: "29/04/2026",
     });
@@ -695,7 +754,7 @@ function useDocumentTemplateConfig(workId: string) {
     setNewDocumentTypeDraft((current) => ({ ...current, ...patch }));
   };
 
-  const createDocumentType = async () => {
+  const createDocumentType = async (status: "draft" | "active" = "active") => {
     const label = newDocumentTypeDraft.label.trim();
     const documentType = normalizeDocumentType(newDocumentTypeDraft.documentType || label);
     const templateName = newDocumentTypeDraft.templateName.trim() || label;
@@ -720,7 +779,7 @@ function useDocumentTemplateConfig(workId: string) {
           description: newDocumentTypeDraft.description.trim() || null,
           documentType,
           targetFolderPath: newDocumentTypeDraft.targetFolderPath || null,
-          status: "active",
+          status,
           contentHtml: buildDefaultDocumentTypeHtml(label),
           schema: {
             fields,
@@ -1099,6 +1158,7 @@ function useDocumentTemplateConfig(workId: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           templateId: draft.id,
+          publishVersion: draft.documentType === "PURCHASE_ORDER" && draft.status === "active",
           name: draft.name,
           description: draft.description,
           documentType: draft.documentType,
@@ -1178,6 +1238,11 @@ function useDocumentTemplateConfig(workId: string) {
     removeField,
     copyHtmlVariables,
     handleSave,
+    canPublishIssuers,
+    publishingIssuers,
+    publishIssuers,
+    changingTemplateStatus,
+    changeTemplateStatus,
   };
 }
 
@@ -1226,6 +1291,11 @@ export function TemplatePickerCard() {
     creatingDocumentType,
     handleTemplateSelect,
     startDocumentTypeCreation,
+    canPublishIssuers,
+    publishingIssuers,
+    publishIssuers,
+    changingTemplateStatus,
+    changeTemplateStatus,
   } = useTemplateConfig();
 
   return (
@@ -1257,12 +1327,17 @@ export function TemplatePickerCard() {
           </div>
         ) : null}
 
+        {canPublishIssuers ? (
+          <Button type="button" variant="secondary" disabled={publishingIssuers} onClick={() => void publishIssuers()}>
+            {publishingIssuers ? "Publicando?" : "Publicar plantillas de Concret y Libresmat"}
+          </Button>
+        ) : null}
         {creatingDocumentType ? <NewDocumentTypeCreator /> : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => (
+            <div key={template.id} className="flex flex-col gap-2">
             <button
-              key={template.id}
               type="button"
               onClick={() => handleTemplateSelect(template.id)}
               className={`h-full overflow-hidden rounded-xl border text-left transition-[border-color,background-color,box-shadow,transform] duration-200 ease-out active:scale-[0.995] ${selectedTemplateId === template.id
@@ -1292,6 +1367,9 @@ export function TemplatePickerCard() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
+                  <Badge variant={template.status === "active" ? "success" : "secondary"}>
+                    {template.status === "active" ? "Publicada" : template.status === "draft" ? "Borrador" : template.status === "archived" ? "Archivada" : "Inactiva"}
+                  </Badge>
                   <Badge shape="pill" variant="outline" >
                     {template.tenantScoped ? "tenant" : "system"}
                   </Badge>
@@ -1301,7 +1379,14 @@ export function TemplatePickerCard() {
                 </div>
               </div>
             </button>
+            {!templates.some((version) => version.key === template.key && version.version > template.version) ? (
+              <Button type="button" variant="outline" size="sm" className="self-start" disabled={changingTemplateStatus} onClick={() => void changeTemplateStatus(template)}>
+                {template.status === "active" ? "Pasar a borrador" : "Publicar plantilla"}
+              </Button>
+            ) : null}
+            </div>
           ))}
+
         </div>
       </CardContent>
     </Card>
@@ -1336,7 +1421,7 @@ function NewDocumentTypeCreator() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-content">Crear tipo documental</p>
-          <p className="mt-1 text-xs text-content-muted">Se crea una template base activa para este tenant.</p>
+
         </div>
         {normalizedDocumentType ? (
           <Badge shape="pill" variant="secondary" >
@@ -1420,6 +1505,9 @@ function NewDocumentTypeCreator() {
         >
           Cancelar
         </Button>
+        <Button type="button" variant="outline" disabled={!canCreate || creatingDocumentTypeSaving} onClick={() => void createDocumentType("draft")}>
+          Crear como borrador
+        </Button>
         <Button type="submit"  disabled={!canCreate || creatingDocumentTypeSaving}>
           {creatingDocumentTypeSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
           Crear tipo
@@ -1463,6 +1551,9 @@ export function TemplateConfigEditorPanel() {
     handleSave,
   } = useTemplateConfig();
   const [fieldsMode, setFieldsMode] = useState<"visual" | "json">("visual");
+  const [advancedTemplateId, setAdvancedTemplateId] = useState<string | null>(null);
+  const isPurchaseOrder = draft?.documentType === "PURCHASE_ORDER";
+  const showRecipe = isPurchaseOrder && advancedTemplateId !== draft?.id;
   const [fieldsJsonState, setFieldsJsonState] = useState({ templateId: "", value: "" });
   const [fieldsJsonError, setFieldsJsonError] = useState("");
   const fieldsJson =
@@ -1508,7 +1599,7 @@ export function TemplateConfigEditorPanel() {
   };
 
   const saveConfiguration = async () => {
-    if (fieldsMode !== "json") {
+    if (showRecipe || fieldsMode !== "json") {
       await handleSave();
       return;
     }
@@ -1538,8 +1629,32 @@ export function TemplateConfigEditorPanel() {
             </div>
           ) : (
             <>
-
-
+              {isPurchaseOrder ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold">{draft.name}</h2>
+                    <p className="text-sm text-muted-foreground">Orden de compra · Versión {selectedTemplate.version}</p>
+                  </div>
+                  <Button type="button" variant="outline" onClick={() => setAdvancedTemplateId(showRecipe ? draft.id : null)}>
+                    {showRecipe ? "Configuración avanzada" : "Volver a los ajustes"}
+                  </Button>
+                </div>
+              ) : null}
+              {showRecipe ? (
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <PurchaseOrderRecipePanel
+                    key={draft.id}
+                    template={draft}
+                    onChange={(patch) => setDraft((current) => current?.id === draft.id ? { ...current, ...patch } : current)}
+                  />
+                  <iframe
+                    title="Vista previa de la orden de compra con datos de ejemplo"
+                    sandbox=""
+                    srcDoc={previewHtml}
+                    className="min-h-120 w-full rounded-lg border bg-white"
+                  />
+                </div>
+              ) : (
               <div className={cn(
                 "grid gap-6",
                 rightPanelMode === "fields"
@@ -1616,10 +1731,10 @@ export function TemplateConfigEditorPanel() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="draft">draft</SelectItem>
-                          <SelectItem value="active">active</SelectItem>
-                          <SelectItem value="inactive">inactive</SelectItem>
-                          <SelectItem value="archived">archived</SelectItem>
+                          <SelectItem value="draft">Borrador</SelectItem>
+                          <SelectItem value="active">Publicada</SelectItem>
+                          <SelectItem value="inactive">Inactiva</SelectItem>
+                          <SelectItem value="archived">Archivada</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2630,18 +2745,19 @@ export function TemplateConfigEditorPanel() {
                   )}
                 </div>
               </div>
+              )}
 
               <Separator />
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-4">
                 <p className="max-w-2xl text-xs leading-5 text-stone-500">
-                  {selectedTemplate.tenantScoped
-                    ? "Estas editando la version propia del tenant."
-                    : "Al guardar se crea o actualiza un override propio del tenant sobre la template sistema."}
+                  {isPurchaseOrder && draft.status === "active"
+                    ? "Las órdenes nuevas usarán la versión publicada. Los borradores existentes conservan su plantilla."
+                    : "Guardá la plantilla para seguir editándola."}
                 </p>
                 <Button type="button" onClick={() => void saveConfiguration()} disabled={saving} >
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Guardar configuracion
+                  {isPurchaseOrder && draft.status === "active" ? "Publicar nueva versión" : "Guardar configuracion"}
                 </Button>
               </div>
             </>

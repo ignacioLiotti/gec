@@ -1,4 +1,6 @@
 "use client";
+import { fetchDocumentMutation } from "@/lib/document-generation-fetch";
+import { PURCHASE_ORDER_SUPPLIER_FIELDS } from "@/lib/purchase-order-supplier";
 import { Textarea } from "@/components/ui/textarea";
 
 
@@ -34,6 +36,10 @@ import {
   GENERATED_DOCUMENT_STATUS_LABELS,
   applyTemplateFormulaInputData,
   applyTemplateAutoInputData,
+  applyTemplateReferenceInputData,
+  formatReferenceRecordLabel,
+  getTemplateReferenceSources,
+  type ReferenceRecord,
   buildInitialInputData,
   type DocumentTemplateSummary,
   type DocumentType,
@@ -191,6 +197,8 @@ type ValidationIssue = {
 
 type DynamicFieldOptions = {
   tenantUsers: TemplateSelectOption[];
+  /** Records of the template's reference sources for the selected obra. */
+  references?: Record<string, ReferenceRecord[]>;
 };
 
 function readDocumentAiContext(inputData: Record<string, unknown>) {
@@ -252,6 +260,24 @@ function mergeSelectOptions(...groups: Array<TemplateSelectOption[] | undefined>
 }
 
 function resolveFieldDynamicOptions(field: TemplateField, dynamicOptions: DynamicFieldOptions): TemplateField {
+  // Reference fields are chosen from a list of records; lookups show the
+  // attribute copied from that record. Both reuse the existing controls.
+  if (field.type === "reference" && field.reference) {
+    const reference = field.reference;
+    const records = dynamicOptions.references?.[reference.source];
+    if (!records) return { ...field, type: "text" };
+    return {
+      ...field,
+      type: "select",
+      selectMode: "strict",
+      options: records.map((record) => {
+        const label = formatReferenceRecordLabel(record, reference);
+        const match = reference.match ? String(record.values[reference.match] ?? "").trim() : "";
+        return { value: label, label: match && match !== label ? `${label} · ${match}` : label };
+      }),
+    };
+  }
+  if (field.type === "lookup") return { ...field, type: "text" };
   const resolvedOptions =
     field.type === "select" && field.optionSource === "tenant_users"
       ? mergeSelectOptions(dynamicOptions.tenantUsers, field.options)
@@ -425,10 +451,10 @@ function createEditorTarget({
 
 const editorSessionTransport: EditorSessionTransport = {
   async persistDraft({ draftId, expectedUpdatedAt, target, inputData }) {
-    const response = await fetch("/api/document-generation/drafts", {
+    const response = await fetchDocumentMutation("/api/document-generation/drafts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      keepalive: true,
+
       body: JSON.stringify({
         id: draftId,
         expectedUpdatedAt,
@@ -481,7 +507,7 @@ const editorSessionTransport: EditorSessionTransport = {
   },
 
   async generate({ draftId, draftUpdatedAt, target, inputData }) {
-    const response = await fetch("/api/document-generation/generate", {
+    const response = await fetchDocumentMutation("/api/document-generation/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -537,7 +563,7 @@ function getTemplateFieldSpan(field: TemplateField) {
 
 function collectTemplateTokens(templateHtml: string) {
   return new Set(
-    Array.from(templateHtml.matchAll(/\{\{(?![#/])\s*([a-zA-Z0-9_]+)\s*\}\}/g)).map((match) => match[1]),
+    Array.from(templateHtml.matchAll(/\{\{(?![#/])\s*([a-zA-Z0-9_]+)\s*(?:\|\s*(?:money|number|date)\s*)?\}\}/g)).map((match) => match[1]),
   );
 }
 
@@ -694,10 +720,13 @@ function renderInlineFieldControl(
     return `<select class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}">${options}</select>`;
   }
 
-  const inputType = field.type === "date" ? "date" : field.type === "number" ? "number" : "text";
-  const inputMode = field.type === "money" ? `inputmode="decimal"` : "";
+  const inputType = field.type === "date" ? "date" : "text";
+  const inputMode = field.type === "money" || field.type === "number" ? `inputmode="decimal"` : "";
   return `<Input class="${escapeHtml(className)}" ${dataAttrs} ${required} aria-label="${label}" type="${inputType}" ${inputMode} value="${currentValue}" />`;
 }
+
+/** `{{campo}}` with an optional print filter (`|money`, `|number`, `|date`). */
+const INLINE_TOKEN_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*(?:\|\s*(?:money|number|date)\s*)?\}\}/g;
 
 function renderEditableDocumentHtml(
   templateHtml: string,
@@ -726,7 +755,7 @@ function renderEditableDocumentHtml(
             row && typeof row === "object" && !Array.isArray(row)
               ? (row as Record<string, unknown>)
               : {};
-          return block.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_rowMatch: string, token: string) => {
+          return block.replace(INLINE_TOKEN_PATTERN, (_rowMatch: string, token: string) => {
             const field = group.fields.find((entry) => entry.key === token) ?? fieldByKey.get(token) ?? fieldBindings.get(token);
             if (field) {
               return renderInlineFieldControl(
@@ -744,7 +773,7 @@ function renderEditableDocumentHtml(
     },
   );
 
-  return renderedRepeatables.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, token: string) => {
+  return renderedRepeatables.replace(INLINE_TOKEN_PATTERN, (_, token: string) => {
     const field = fieldByKey.get(token) ?? fieldBindings.get(token);
     if (field) {
       return renderInlineFieldControl(
@@ -1110,6 +1139,7 @@ function TextInput({
   mono,
   error,
   type = "text",
+  inputMode,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1118,6 +1148,7 @@ function TextInput({
   mono?: boolean;
   error?: boolean;
   type?: "text" | "number" | "date";
+  inputMode?: "decimal";
 }) {
   return (
     <div className="relative">
@@ -1128,6 +1159,8 @@ function TextInput({
       ) : null}
       <Input aria-invalid={error}
         type={type}
+        step={type === "number" ? "any" : undefined}
+        inputMode={inputMode}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -1269,6 +1302,7 @@ export function DocumentGenerationPageClient() {
   const [previewZoom, setPreviewZoom] = useState(112);
   const [showValidationReview, setShowValidationReview] = useState(false);
   const [editorMode, setEditorMode] = useState<"inline" | "form">("inline");
+  const [referenceRecords, setReferenceRecords] = useState<Record<string, ReferenceRecord[]>>({});
   const inlineDocumentRootRef = useRef<HTMLDivElement | null>(null);
   const inlineInputDataRef = useRef<Record<string, unknown>>({});
   const bootstrapRequestIdRef = useRef(0);
@@ -1314,6 +1348,7 @@ export function DocumentGenerationPageClient() {
         if (params?.workId) query.set("workId", params.workId);
         if (params?.folderPath) query.set("folderPath", params.folderPath);
         if (params?.documentType) query.set("documentType", params.documentType);
+        if (options?.templateId) query.set("templateId", options.templateId);
 
         const response = await fetch(`/api/document-generation/bootstrap?${query.toString()}`);
         const payload = (await response.json()) as BootstrapResponse & { error?: string };
@@ -1554,9 +1589,47 @@ export function DocumentGenerationPageClient() {
     () => templates.find((template) => template.id === templateId) ?? null,
     [templateId, templates],
   );
-  const selectedTemplateFields = useMemo(
-    () => selectedTemplate?.schema.fields.map((field) => resolveFieldDynamicOptions(field, dynamicOptions)) ?? [],
-    [dynamicOptions, selectedTemplate],
+  const referenceSourceKey = selectedTemplate ? getTemplateReferenceSources(selectedTemplate.schema).join(",") : "";
+  useEffect(() => {
+    if (!referenceSourceKey) {
+      setReferenceRecords({});
+      return;
+    }
+    const controller = new AbortController();
+    const query = new URLSearchParams({ records: referenceSourceKey });
+    if (workId) query.set("workId", workId);
+    fetch(`/api/document-generation/sources?${query.toString()}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as { records?: Record<string, ReferenceRecord[]>; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "No se pudieron cargar los datos vinculados.");
+        setReferenceRecords(payload.records ?? {});
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setReferenceRecords({});
+        toast.error(error instanceof Error ? error.message : "No se pudieron cargar los datos vinculados.");
+      });
+    return () => controller.abort();
+  }, [referenceSourceKey, workId]);
+
+  const selectedTemplateFields = useMemo(() => {
+    const options = { ...dynamicOptions, references: referenceRecords };
+    if (!selectedTemplate) return [];
+      const fields = selectedTemplate.schema.fields;
+      const purchaseOrder = selectedTemplate.documentType === "PURCHASE_ORDER" || selectedTemplate.documentType === "ORDEN_DE_COMPRA_V2";
+      const supplier = purchaseOrder ? PURCHASE_ORDER_SUPPLIER_FIELDS.filter((field) => !fields.some((existing) => existing.key === field.key)) : [];
+      return [...fields, ...supplier].map((field) => resolveFieldDynamicOptions(field, options));
+  }, [dynamicOptions, referenceRecords, selectedTemplate]);
+
+  const deriveInputData = useCallback(
+    (nextData: Record<string, unknown>) =>
+      selectedTemplate
+        ? applyTemplateFormulaInputData(
+          selectedTemplate.schema,
+          applyTemplateReferenceInputData(selectedTemplate.schema, nextData, referenceRecords),
+        )
+        : nextData,
+    [referenceRecords, selectedTemplate],
   );
 
   const visibleFolderOptions = useMemo(() => {
@@ -1565,23 +1638,11 @@ export function DocumentGenerationPageClient() {
       (config) => config.allowedDocumentTypes.length === 0 || config.allowedDocumentTypes.includes(documentType),
     );
   }, [documentType, folderConfigs]);
-  const documentTypeOptions = useMemo(() => {
-    const configuredTypes = new Set<DocumentType>();
-    for (const configuredType of folderConfigs.flatMap((config) => config.allowedDocumentTypes)) {
-      configuredTypes.add(configuredType);
-    }
-    for (const template of templateCatalog) {
-      configuredTypes.add(template.documentType);
-    }
-    if (documentType) {
-      configuredTypes.add(documentType);
-    }
-
-    return Array.from(configuredTypes).map((value) => ({
-      value,
-      label: formatDocumentTypeLabel(value),
-    }));
-  }, [documentType, folderConfigs, templateCatalog]);
+  const documentTypeOptions = useMemo(() =>
+    [...new Set(templateCatalog.map((template) => template.documentType))]
+      .map((value) => ({ value, label: formatDocumentTypeLabel(value) })),
+    [templateCatalog],
+  );
 
   const standaloneFields = useMemo(
     () => selectedTemplateFields.filter((field) => !field.repeatableGroup && field.type !== "table"),
@@ -1758,22 +1819,17 @@ export function DocumentGenerationPageClient() {
   };
 
   const commitInputData = useCallback((nextData: Record<string, unknown>) => {
-    const derivedData = selectedTemplate
-      ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
-      : nextData;
+    const derivedData = deriveInputData(nextData);
     inlineInputDataRef.current = derivedData;
     editorSession.edit(derivedData);
-  }, [editorSession, selectedTemplate]);
+  }, [deriveInputData, editorSession]);
 
   const updateInputDataFromLatest = useCallback((updater: (current: Record<string, unknown>) => Record<string, unknown>) => {
-    const nextData = updater(inlineInputDataRef.current);
-    const derivedData = selectedTemplate
-      ? applyTemplateFormulaInputData(selectedTemplate.schema, nextData)
-      : nextData;
+    const derivedData = deriveInputData(updater(inlineInputDataRef.current));
     inlineInputDataRef.current = derivedData;
     editorSession.edit(derivedData);
     return derivedData;
-  }, [editorSession, selectedTemplate]);
+  }, [deriveInputData, editorSession]);
 
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
@@ -1908,13 +1964,11 @@ export function DocumentGenerationPageClient() {
   const syncInlineDraftValue = useCallback((target: HTMLInputElement | HTMLSelectElement, nextValue: string) => {
     const next = buildInlineDraftData(target, nextValue);
     if (!next) return null;
-    const derivedData = selectedTemplate
-      ? applyTemplateFormulaInputData(selectedTemplate.schema, next.data)
-      : next.data;
+    const derivedData = deriveInputData(next.data);
     inlineInputDataRef.current = derivedData;
     editorSession.edit(derivedData);
     return { ...next, data: derivedData };
-  }, [buildInlineDraftData, editorSession, selectedTemplate]);
+  }, [buildInlineDraftData, deriveInputData, editorSession]);
 
   const clearInlineValidationErrors = useCallback((changedErrorKeys: string[]) => {
     setValidationErrors((current) => {
@@ -2187,7 +2241,10 @@ export function DocumentGenerationPageClient() {
         onChange={onChange}
         placeholder={`Completar ${field.label.toLowerCase()}`}
         mono={field.type === "money" || field.type === "number"}
-        type={field.type === "date" ? "date" : field.type === "number" || field.type === "money" ? "number" : "text"}
+        type={field.type === "date" ? "date" :
+          (field.type === "number" || field.type === "money") &&
+          documentType !== "PURCHASE_ORDER" && documentType !== "ORDEN_DE_COMPRA_V2" ? "number" : "text"}
+        inputMode={field.type === "number" || field.type === "money" ? "decimal" : undefined}
         icon={field.type === "date" ? <CalendarDays className="size-3.5" /> : undefined}
       />
     );

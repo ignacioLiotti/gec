@@ -111,17 +111,6 @@ const ObraFlujoTab = dynamic(
 	}
 );
 
-const ObraDocumentsTab = dynamic(
-	() => import("./tabs/documents-tab").then((mod) => mod.ObraDocumentsTab),
-	{
-		loading: () => (
-			<div className="flex h-[600px] animate-pulse gap-4">
-				<div className="w-64 shrink-0 rounded-lg border bg-stone-100" />
-				<div className="flex-1 rounded-lg border bg-stone-100" />
-			</div>
-		),
-	}
-);
 
 const ObraDocumentsNewTab = dynamic(
 	() => import("./tabs/documents-new-tab").then((mod) => mod.ObraDocumentsNewTab),
@@ -278,7 +267,7 @@ function scheduleSecondaryTabWarmup(callback: () => void) {
 }
 
 async function fetchDocumentsNewRootListing(obraId: string) {
-	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/list`, {
+	const response = await fetch(`/api/obras/${encodeURIComponent(obraId)}/documents/list?view=folder`, {
 		cache: "no-store",
 	});
 	const payload = await response.json().catch(() => null);
@@ -1366,11 +1355,12 @@ function ObraDetailPageContent({
 		return raw;
 	}, [initialObraId, params]);
 	const isValidObraId = Boolean(obraId && obraId !== "undefined");
-	const resolvedInitialTab = queryParams.get("tab") || initialTab;
+	const requestedTab = queryParams.get("tab") || initialTab;
+	const resolvedInitialTab = requestedTab === "documentos-new" ? "documentos" : requestedTab;
 	const [activeTab, setActiveTab] = useState(resolvedInitialTab);
 	const isGeneralTabActive = activeTab === "general";
 	const isDocumentsTabActive = activeTab === "documentos";
-	const isDocumentsNewTabActive = activeTab === "documentos-new";
+
 	const isInsurancePoliciesTabActive = activeTab === "polizas";
 	const isFlujoTabActive = activeTab === "flujo";
 	const isCertificatesTabActive = activeTab === "certificates";
@@ -1861,7 +1851,7 @@ function ObraDetailPageContent({
 
 		return scheduleSecondaryTabWarmup(() => {
 			void import("./tabs/flujo-tab");
-			void import("./tabs/documents-tab");
+
 			void import("./tabs/documents-new-tab");
 			void import("./tabs/insurance-policies-tab");
 
@@ -2044,7 +2034,7 @@ function ObraDetailPageContent({
 	const [globalMaterialsFilter, setGlobalMaterialsFilter] = useState("");
 	const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 	const [orderFilters, setOrderFilters] = useState<Record<string, string>>(() => ({}));
-	const [documentsRecoveryRequestToken, setDocumentsRecoveryRequestToken] = useState(0);
+
 	const isIlagDemoTenant = tenantMarkerQuery.data === true;
 	const [isIlagMaterialsWizardOpen, setIsIlagMaterialsWizardOpen] = useState(false);
 
@@ -2099,12 +2089,8 @@ function ObraDetailPageContent({
 	}, [queryParams, setQueryParams]);
 
 	const handleOpenDocumentsRecovery = useCallback(() => {
-		if (activeTab !== "documentos") {
-			setActiveTab("documentos");
-			setQueryParams({ tab: "documentos" });
-		}
-		setDocumentsRecoveryRequestToken((prev) => prev + 1);
-	}, [activeTab, setQueryParams]);
+		if (obraId) push(`/excel/${encodeURIComponent(obraId)}/papelera`);
+	}, [obraId, push]);
 
 	const handleOpenDocumentsTrashPage = useCallback(() => {
 		if (!obraId) return;
@@ -3718,7 +3704,7 @@ function ObraDetailPageContent({
 								}
 							/>
 							<div className="flex flex-wrap items-center gap-2 xl:justify-end">
-								{activeTab === "documentos" || activeTab === "documentos-new" ? (
+								{activeTab === "documentos" ? (
 									<>
 										<Button
 											type="button"
@@ -4171,16 +4157,7 @@ function ObraDetailPageContent({
 								handleNewCertificateChange={handleNewCertificateChange}
 							/> */}
 
-								{isDocumentsTabActive ? (
-									<ObraDocumentsTab
-										obraId={obraId}
-										materialOrders={materialOrders}
-										refreshMaterialOrders={refreshMaterialOrders}
-										recoveryRequestToken={documentsRecoveryRequestToken}
-									/>
-								) : null}
-
-								{isDocumentsNewTabActive && obraId ? (
+								{isDocumentsTabActive && obraId ? (
 									<ObraDocumentsNewTab obraId={obraId} />
 								) : null}
 							</div>

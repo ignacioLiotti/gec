@@ -31,6 +31,7 @@ API routes and RLS policies must enforce the same split. Creation, generated-doc
 - New role templates are required only for reviewers and document managers.
 - Future document-generation features should be tenant-member access by default unless they mutate review decisions or template/configuration state.
 - Generated documents are visible tenant-wide to authenticated tenant members; private drafts remain scoped to the creating user.
+- Template managers can publish a template or move it to draft in their organization. A draft stays in the configuration catalog and the generation catalog follows the latest version of each template key. A draft override also hides the corresponding system template for that organization.
 
 ## Alternatives considered
 
